@@ -13,7 +13,7 @@ dist-ssr
 *.local
 
 # Editor directories and files
-.vscode/*
+.vscode/
 !.vscode/extensions.json
 .idea
 .DS_Store
@@ -22,3 +22,42 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+package-lock.json
+
+
+## dotnet backend
+
+# Build results
+bin/
+obj/
+out/
+artifacts/
+Debug/
+Release/
+
+# .NET Core
+project.lock.json
+project.fragment.lock.json
+*.nuget.props
+*.nuget.targets
+
+# ASP.NET Core secret files
+secrets.json
+
+## User-specific files
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.userprefs
+
+## Cache
+.nCrunch*
+*.cache
+*.db
+*.opendb
+
+
+## Environment-specific configs (keep your prod config!)
+appsettings.*.local.json
+
