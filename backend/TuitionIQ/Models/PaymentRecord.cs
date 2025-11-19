@@ -1,3 +1,6 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+
 namespace TuitionIQ.Models
 {
 
@@ -17,14 +20,14 @@ namespace TuitionIQ.Models
     [ForeignKey("StudentId")]
     public int StudentId { get; set; }
 
-    public Student Student { get; set; }
+    public required Student Student { get; set; }
 
     [Required]
-    public decimal Amount { get; set; }
+    public required decimal Amount { get; set; }
 
     [Required]
-    public DateTime PaymentDate { get; set; }
+    public required DateTime PaymentDate { get; set; }
 
-    public string RecordedBy { get; set; }
+    public required string RecordedBy { get; set; }
   }
 }
