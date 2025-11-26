@@ -15,6 +15,7 @@ namespace TuitionIQ.Models
     [MaxLength(50)]
     public required string LastName { get; set; }
 
+    [Required]
     [EmailAddress]
     public required string Email { get; set; }
 
