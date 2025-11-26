@@ -25,6 +25,37 @@ dist-ssr
 package-lock.json
 
 
+# Environment files
+.env
+.env.*
+
+# Local dev DBs
+*.db
+*.sqlite
+tuition.db
+
+# Frontend build / dependency folders
+frontend/dist/
+frontend/.vite/
+frontend/build/
+frontend/node_modules/
+
+# Logs and reports
+coverage/
+coverage-final.json
+npm-debug.log*
+
+# OS files
+.DS_Store
+
+# Visual Studio / Rider / IDE
+.vs/
+/.idea/
+
+# Lock files (if you prefer not to track them)
+# (Note: if you want to keep lock files for reproducible installs, remove these)
+package-lock.json
+frontend/package-lock.json
 ## dotnet backend
 
 # Build results

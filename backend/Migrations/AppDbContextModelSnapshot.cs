@@ -27,11 +27,20 @@ namespace TuitionIQ.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("TEXT");
 
-                    b.Property<DateTime>("PaymentDate")
+                    b.Property<int>("BillMonth")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("BillYear")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsPaid")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("RecordedBy")
-                        .IsRequired()
+                    b.Property<DateTime?>("PaymentDate")
                         .HasColumnType("TEXT");
 
                     b.Property<int>("StudentId")
@@ -39,19 +48,23 @@ namespace TuitionIQ.Migrations
 
                     b.HasKey("PaymentRecordId");
 
-                    b.HasIndex("StudentId");
+                    b.HasIndex("StudentId", "BillYear", "BillMonth")
+                        .IsUnique();
 
                     b.ToTable("PaymentRecords");
                 });
 
             modelBuilder.Entity("TuitionIQ.Models.Student", b =>
                 {
-                    b.Property<int>("StudentId")
+                    b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("Email")
                         .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("EnrollmentDate")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("FirstName")
@@ -64,7 +77,10 @@ namespace TuitionIQ.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("TEXT");
 
-                    b.HasKey("StudentId");
+                    b.HasKey("Id");
+
+                    b.HasIndex("Email")
+                        .IsUnique();
 
                     b.ToTable("Students");
                 });

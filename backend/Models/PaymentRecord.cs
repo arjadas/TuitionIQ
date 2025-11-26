@@ -3,14 +3,6 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace TuitionIQ.Models
 {
-
-  public enum PaymentStatus
-  {
-    Unpaid = 0,
-    Paid = 1,
-    Pending = 2
-  }
-
   public class PaymentRecord
   {
     [Key]
@@ -23,11 +15,22 @@ namespace TuitionIQ.Models
     public required Student Student { get; set; }
 
     [Required]
-    public required decimal Amount { get; set; }
+    [Range(2020, 2100)]
+    public int BillYear { get; set; }
 
     [Required]
-    public required DateTime PaymentDate { get; set; }
+    [Range(1, 12)]
+    public int BillMonth { get; set; }
 
-    public required string RecordedBy { get; set; }
+    [Required]
+    [Range(0.01, 10000.00)]
+    public decimal Amount { get; set; }
+
+    public bool IsPaid { get; set; } = false;
+
+    public DateTime? PaymentDate { get; set; }
+
+    [MaxLength(500)]
+    public string? Notes { get; set; }
   }
 }
