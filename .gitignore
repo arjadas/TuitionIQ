@@ -32,7 +32,9 @@ package-lock.json
 # Local dev DBs
 *.db
 *.sqlite
-tuition.db
+*.db
+*.db-shm
+*.db-wal
 
 # Frontend build / dependency folders
 frontend/dist/
