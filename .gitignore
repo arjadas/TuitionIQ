@@ -1,0 +1,96 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+package-lock.json
+
+
+# Environment files
+.env
+.env.*
+
+# Local dev DBs
+*.db
+*.sqlite
+*.db
+*.db-shm
+*.db-wal
+
+# Frontend build / dependency folders
+frontend/dist/
+frontend/.vite/
+frontend/build/
+frontend/node_modules/
+
+# Logs and reports
+coverage/
+coverage-final.json
+npm-debug.log*
+
+# OS files
+.DS_Store
+
+# Visual Studio / Rider / IDE
+.vs/
+/.idea/
+
+# Lock files (if you prefer not to track them)
+# (Note: if you want to keep lock files for reproducible installs, remove these)
+package-lock.json
+frontend/package-lock.json
+## dotnet backend
+
+# Build results
+bin/
+obj/
+out/
+artifacts/
+Debug/
+Release/
+
+# .NET Core
+project.lock.json
+project.fragment.lock.json
+*.nuget.props
+*.nuget.targets
+
+# ASP.NET Core secret files
+secrets.json
+
+## User-specific files
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.userprefs
+
+## Cache
+.nCrunch*
+*.cache
+*.db
+*.opendb
+
+
+## Environment-specific configs (keep your prod config!)
+appsettings.*.local.json
+
