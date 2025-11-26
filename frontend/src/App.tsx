@@ -1,35 +1,93 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
 import './App.css'
 
 function App() {
-  const [count, setCount] = useState(0)
 
   return (
     <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+
+      <div
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          width: "100%",
+          background: "#f59e0b",
+          color: "white",
+          padding: "0.5rem",
+          textAlign: "center",
+          fontWeight: "bold",
+        }}
+      >
+        🚧 This application is still in development 🚧
       </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
+
+
+      <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "#eff6ff",
+        textAlign: "center",
+        padding: "2rem",
+      }}
+    >
+      <div
+        style={{
+          background: "white",
+          padding: "3rem",
+          borderRadius: "16px",
+          boxShadow: "0 4px 30px rgba(0,0,0,0.1)",
+          maxWidth: "600px",
+          width: "100%",
+        }}
+      >
+        <h1
+          style={{
+            fontSize: "2.5rem",
+            marginBottom: "1rem",
+            color: "#1e3a8a",
+          }}
+        >
+          TuitionIQ
+        </h1>
+
+        <p
+          style={{
+            color: "#475569",
+            marginBottom: "2rem",
+            lineHeight: "1.5",
+          }}
+        >
+          Welcome to TuitionIQ!  
+          This is a platform where you can manage your TuitionIQ
+          dashboard, student management, payment tracking, or anything else.
         </p>
+
+        <button
+          style={{
+            background: "#2563eb",
+            color: "white",
+            border: "none",
+            padding: "0.75rem 1.5rem",
+            borderRadius: "8px",
+            fontSize: "1rem",
+            cursor: "pointer",
+          }}
+          onClick={() => alert("Stay tuned for updates!")}
+        >
+          Get Started
+        </button>
       </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
+
+      <footer style={{ marginTop: "2rem", color: "#64748b" }}>
+        © {new Date().getFullYear()} TuitionIQ
+      </footer>
+    </div>
+
     </>
-  )
+  );
 }
 
 export default App
