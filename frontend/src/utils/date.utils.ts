@@ -1,14 +1,12 @@
+import { MONTHS } from '@/constants/config';
+
 export const formatDate = (date: Date | string): string => {
   const dateObj = typeof date === 'string' ? new Date(date) : date;
   return dateObj.toLocaleDateString();
 };
 
 export const getMonthName = (month: number): string => {
-  const months = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
-  ];
-  return months[month - 1] || '';
+  return MONTHS[month - 1] || '';
 };
 
 export const isOverdue = (dueDate: Date | string, isPaid: boolean): boolean => {
