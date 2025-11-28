@@ -8,7 +8,7 @@ import { Dashboard } from '@/pages/Dashboard';
 import { StudentsPage } from '@/pages/StudentsPage';
 import { PaymentRecordsPage } from '@/pages/PaymentsPage';
 import { StudentForm } from '@/components/students/StudentForm';
-import { PaymentRecordForm } from '@/components/payments/PaymentForm';
+import { PaymentRecordForm } from '@/components/payments/PaymentRecordForm';
 import { useStudents } from '@/hooks/useStudents';
 import { usePaymentRecords } from '@/hooks/usePaymentRecords';
 import { CURRENT_YEAR, CURRENT_MONTH } from '@/constants/config';
