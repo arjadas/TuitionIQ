@@ -31,7 +31,7 @@ namespace TuitionIQ.Migrations
                 name: "PaymentRecords",
                 columns: table => new
                 {
-                    PaymentRecordId = table.Column<int>(type: "INTEGER", nullable: false)
+                    Id = table.Column<int>(type: "INTEGER", nullable: false)
                         .Annotation("Sqlite:Autoincrement", true),
                     StudentId = table.Column<int>(type: "INTEGER", nullable: false),
                     BillYear = table.Column<int>(type: "INTEGER", nullable: false),
@@ -43,7 +43,7 @@ namespace TuitionIQ.Migrations
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_PaymentRecords", x => x.PaymentRecordId);
+                    table.PrimaryKey("PK_PaymentRecords", x => x.Id);
                     table.ForeignKey(
                         name: "FK_PaymentRecords_Students_StudentId",
                         column: x => x.StudentId,

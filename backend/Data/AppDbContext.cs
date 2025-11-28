@@ -1,45 +1,51 @@
 using Microsoft.EntityFrameworkCore;
 using TuitionIQ.Models;
 
-namespace TuitionIQ.Data
+namespace TuitionIQ.Data;
+
+/// <summary>
+/// Database context - manages database connection and entity operations.
+/// </summary>
+public class AppDbContext : DbContext
 {
-  // Database context - manages database connection and operations
-  public class AppDbContext : DbContext
+  public AppDbContext(DbContextOptions<AppDbContext> options)
+      : base(options) { }
+
+  /// <summary>
+  /// Students table.
+  /// </summary>
+  public DbSet<Student> Students { get; set; }
+
+  /// <summary>
+  /// Payment records table.
+  /// </summary>
+  public DbSet<PaymentRecord> PaymentRecords { get; set; }
+
+  protected override void OnModelCreating(ModelBuilder modelBuilder)
   {
-    public AppDbContext(DbContextOptions<AppDbContext> options)
-        : base(options) { }
+    base.OnModelCreating(modelBuilder);
 
-    // DbSet properties represent tables in the database
-    public DbSet<Student> Students { get; set; }
-    public DbSet<PaymentRecord> PaymentRecords { get; set; }
-
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    // Configure Student entity
+    modelBuilder.Entity<Student>(entity =>
     {
+      entity.HasIndex(e => e.Email).IsUnique();
+    });
 
-      base.OnModelCreating(modelBuilder);
+    modelBuilder.Entity<PaymentRecord>(entity =>
+    {
+      // Decimal precision - 18 digits total, 2 after decimal point
+      entity.Property(p => p.Amount)
+              .HasPrecision(18, 2);
 
-      // Configure Student entity
-      modelBuilder.Entity<Student>(entity =>
-        {
-          entity.HasIndex(e => e.Email).IsUnique();
-        });
+      // Relationship: PaymentRecord → Student
+      entity.HasOne(p => p.Student)
+              .WithMany(s => s.PaymentRecords)
+              .HasForeignKey(p => p.StudentId)
+              .OnDelete(DeleteBehavior.Cascade);
 
-      modelBuilder.Entity<PaymentRecord>(entity =>
-        {
-          // Decimal precision - 18 digits total, 2 after decimal point
-          entity.Property(p => p.Amount)
-            .HasPrecision(18, 2);
-
-          // Relationship: PaymentRecord → Student
-          entity.HasOne(p => p.Student)
-            .WithMany(s => s.Payments)
-            .HasForeignKey(p => p.StudentId)
-            .OnDelete(DeleteBehavior.Cascade);
-
-          // Ensure one payment per student per billing period
-          entity.HasIndex(p => new { p.StudentId, p.BillYear, p.BillMonth })
-            .IsUnique();
-        });
-    }
+      // Ensure one payment per student per billing period
+      entity.HasIndex(p => new { p.StudentId, p.BillYear, p.BillMonth })
+              .IsUnique();
+    });
   }
 }

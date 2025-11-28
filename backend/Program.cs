@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using TuitionIQ.Data;
+using TuitionIQ.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -16,7 +17,12 @@ builder.Services.AddCors(options =>
     options.AddPolicy("AllowReactApp",
         policy =>
         {
-            policy.WithOrigins("http://localhost:3000", "http://localhost:5173") // React default ports
+            policy.WithOrigins(
+                    "http://localhost:3000",     // Create React App default
+                    "http://localhost:5173",     // Vite default
+                    "http://localhost:5174",     // Vite fallback port
+                    "http://192.168.0.3:5173",   // Local network access (your IP)
+                    "http://192.168.0.3:5174")   // Local network access (fallback)
                 .AllowAnyHeader()
                 .AllowAnyMethod();
         });
@@ -41,6 +47,9 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
+// Global exception handling middleware
+app.UseExceptionHandling();
 
 app.UseCors("AllowReactApp");
 
