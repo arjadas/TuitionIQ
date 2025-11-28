@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Search } from 'lucide-react';
 import { StudentCard } from './StudentCard';
+import { StudentDetailModal } from './StudentDetailModal';
 import type { Student } from '@/types';
 
 interface StudentListProps {
@@ -18,6 +19,26 @@ export const StudentList: React.FC<StudentListProps> = ({
   onEdit,
   onDelete,
 }) => {
+  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+
+  const handleCardClick = (student: Student) => {
+    setSelectedStudent(student);
+  };
+
+  const handleCloseModal = () => {
+    setSelectedStudent(null);
+  };
+
+  const handleEditFromModal = (student: Student) => {
+    setSelectedStudent(null);
+    onEdit(student);
+  };
+
+  const handleDeleteFromModal = (id: number) => {
+    setSelectedStudent(null);
+    onDelete(id);
+  };
+
   return (
     <div>
       <div className="mb-4">
@@ -40,9 +61,19 @@ export const StudentList: React.FC<StudentListProps> = ({
             student={student}
             onEdit={onEdit}
             onDelete={onDelete}
+            onClick={handleCardClick}
           />
         ))}
       </div>
+
+      {selectedStudent && (
+        <StudentDetailModal
+          student={selectedStudent}
+          onClose={handleCloseModal}
+          onEdit={handleEditFromModal}
+          onDelete={handleDeleteFromModal}
+        />
+      )}
     </div>
   );
 };
