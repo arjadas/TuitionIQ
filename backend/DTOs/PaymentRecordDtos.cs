@@ -1,53 +1,57 @@
-using System;
 using System.ComponentModel.DataAnnotations;
 
-namespace TuitionIQ.DTOs
+namespace TuitionIQ.DTOs;
+
+/// <summary>
+/// DTO for creating a new payment record.
+/// </summary>
+public record CreatePaymentRecordDto
 {
-  // For creating a new payment
-  public class CreatePaymentRecordDto
-  {
-    [Required]
-    public int StudentId { get; set; }
+  [Required]
+  public int StudentId { get; init; }
 
-    [Required]
-    [Range(2020, 2100)]
-    public int BillYear { get; set; }
+  [Required]
+  [Range(2020, 2100)]
+  public int BillYear { get; init; }
 
-    [Required]
-    [Range(1, 12)]
-    public int BillMonth { get; set; }
+  [Required]
+  [Range(1, 12)]
+  public int BillMonth { get; init; }
 
-    [Required]
-    [Range(0.01, 10000.00)]
-    public decimal Amount { get; set; }
+  [Required]
+  [Range(0.01, 10000.00)]
+  public decimal Amount { get; init; }
 
-    [MaxLength(500)]
-    public string? Notes { get; set; }
-  }
+  [MaxLength(500)]
+  public string? Notes { get; init; }
+}
 
-  // For updating payment status
-  public class UpdatePaymentStatusDto
-  {
-    [Required]
-    public bool IsPaid { get; set; }
+/// <summary>
+/// DTO for updating payment status.
+/// </summary>
+public record UpdatePaymentStatusDto
+{
+  [Required]
+  public bool IsPaid { get; init; }
 
-    public DateTime? PaymentDate { get; set; }
+  public DateTime? PaymentDate { get; init; }
 
-    [MaxLength(500)]
-    public string? Notes { get; set; }
-  }
+  [MaxLength(500)]
+  public string? Notes { get; init; }
+}
 
-  // For returning payment data
-  public class PaymentRecordDto
-  {
-    public int Id { get; set; }
-    public int StudentId { get; set; }
-    public string StudentName { get; set; } = string.Empty;
-    public int BillYear { get; set; }
-    public int BillMonth { get; set; }
-    public decimal Amount { get; set; }
-    public bool IsPaid { get; set; }
-    public DateTime? PaymentDate { get; set; }
-    public string? Notes { get; set; }
-  }
+/// <summary>
+/// DTO for returning payment record data to clients.
+/// </summary>
+public record PaymentRecordDto
+{
+  public int Id { get; init; }
+  public int StudentId { get; init; }
+  public string StudentName { get; init; } = string.Empty;
+  public int BillYear { get; init; }
+  public int BillMonth { get; init; }
+  public decimal Amount { get; init; }
+  public bool IsPaid { get; init; }
+  public DateTime? PaymentDate { get; init; }
+  public string? Notes { get; init; }
 }
