@@ -2,6 +2,29 @@ import { useState, useEffect, useCallback } from 'react';
 import { studentsApi } from '@/api/students.api';
 import type { Student, CreateStudentDto, UpdateStudentDto } from '@/types';
 
+/**
+ * Custom hook for managing student data with CRUD operations.
+ * 
+ * Provides:
+ * - `students`: Array of all students
+ * - `loading`: Boolean indicating if data is being fetched
+ * - `error`: Error message if an operation failed
+ * - `fetchStudents`: Function to refresh the student list
+ * - `createStudent`: Function to create a new student
+ * - `updateStudent`: Function to update an existing student
+ * - `deleteStudent`: Function to delete a student
+ * 
+ * @returns Student state and CRUD operations
+ * 
+ * @example
+ * ```tsx
+ * const { students, loading, createStudent } = useStudents();
+ * 
+ * if (loading) return <Spinner />;
+ * 
+ * return students.map(s => <StudentCard key={s.id} student={s} />);
+ * ```
+ */
 export const useStudents = () => {
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);

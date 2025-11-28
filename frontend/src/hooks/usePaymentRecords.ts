@@ -2,6 +2,36 @@ import { useState, useEffect, useCallback } from 'react';
 import { paymentRecordsApi } from '@/api/paymentRecords.api';
 import type { PaymentRecord, CreatePaymentRecordDto, UpdatePaymentStatusDto } from '@/types';
 
+/**
+ * Custom hook for managing payment record data with CRUD operations.
+ * 
+ * Provides:
+ * - `paymentRecords`: Array of all payment records with computed fields (monthName, dueDate, isOverdue)
+ * - `loading`: Boolean indicating if data is being fetched
+ * - `error`: Error message if an operation failed
+ * - `fetchPaymentRecords`: Function to refresh the payment records list
+ * - `createPaymentRecord`: Function to create a new payment record
+ * - `updatePaymentStatus`: Function to update payment status (paid/unpaid)
+ * - `togglePaymentStatus`: Function to toggle between paid/unpaid status
+ * - `deletePaymentRecord`: Function to delete a payment record
+ * 
+ * @returns Payment record state and CRUD operations
+ * 
+ * @example
+ * ```tsx
+ * const { paymentRecords, loading, togglePaymentStatus } = usePaymentRecords();
+ * 
+ * if (loading) return <Spinner />;
+ * 
+ * return paymentRecords.map(p => (
+ *   <PaymentCard 
+ *     key={p.id} 
+ *     payment={p} 
+ *     onToggle={() => togglePaymentStatus(p.id, p.isPaid)} 
+ *   />
+ * ));
+ * ```
+ */
 export const usePaymentRecords = () => {
   const [paymentRecords, setPaymentRecords] = useState<PaymentRecord[]>([]);
   const [loading, setLoading] = useState(true);
