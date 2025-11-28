@@ -4,6 +4,7 @@ import { Header } from '@/components/layout/Header';
 import { StatCard } from '@/components/common/StatCard';
 import { TabButton } from '@/components/common/TabButton';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
+import { ConnectionStatus } from '@/components/common/ConnectionStatus';
 import { Dashboard } from '@/pages/Dashboard';
 import { StudentsPage } from '@/pages/StudentsPage';
 import { PaymentRecordsPage } from '@/pages/PaymentsPage';
@@ -52,6 +53,7 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <ConnectionStatus />
       <Header
         onAddStudent={() => setShowStudentForm(true)}
         onAddPayment={() => setShowPaymentForm(true)}
