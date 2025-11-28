@@ -25,7 +25,7 @@ namespace TuitionIQ.Controllers
           .Include(p => p.Student)
           .Select(p => new PaymentRecordDto
           {
-            PaymentRecordId = p.PaymentRecordId,
+            Id = p.Id,
             StudentId = p.StudentId,
             StudentName = $"{p.Student.FirstName} {p.Student.LastName}",
             BillYear = p.BillYear,
@@ -48,10 +48,10 @@ namespace TuitionIQ.Controllers
     {
       var paymentRecord = await _context.PaymentRecords
           .Include(p => p.Student)
-          .Where(p => p.PaymentRecordId == id)
+          .Where(p => p.Id == id)
           .Select(p => new PaymentRecordDto
           {
-            PaymentRecordId = p.PaymentRecordId,
+            Id = p.Id,
             StudentId = p.StudentId,
             StudentName = $"{p.Student.FirstName} {p.Student.LastName}",
             BillYear = p.BillYear,
@@ -80,7 +80,7 @@ namespace TuitionIQ.Controllers
           .Where(p => p.StudentId == studentId)
           .Select(p => new PaymentRecordDto
           {
-            PaymentRecordId = p.PaymentRecordId,
+            Id = p.Id,
             StudentId = p.StudentId,
             StudentName = $"{p.Student.FirstName} {p.Student.LastName}",
             BillYear = p.BillYear,
@@ -134,7 +134,7 @@ namespace TuitionIQ.Controllers
 
       var paymentRecordDto = new PaymentRecordDto
       {
-        PaymentRecordId = paymentRecord.PaymentRecordId,
+        Id = paymentRecord.Id,
         StudentId = paymentRecord.StudentId,
         StudentName = $"{student.FirstName} {student.LastName}",
         BillYear = paymentRecord.BillYear,
@@ -145,7 +145,7 @@ namespace TuitionIQ.Controllers
         Notes = paymentRecord.Notes
       };
 
-      return CreatedAtAction(nameof(GetPaymentRecord), new { id = paymentRecord.PaymentRecordId }, paymentRecordDto);
+      return CreatedAtAction(nameof(GetPaymentRecord), new { id = paymentRecord.Id }, paymentRecordDto);
     }
 
     // PUT: api/paymentrecords/{id}/status

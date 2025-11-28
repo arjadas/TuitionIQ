@@ -60,7 +60,7 @@ function App() {
             lineHeight: "1.5",
           }}
         >
-          Welcome to TuitionIQ!  
+          Welcome to TuitionIQ! <br />
           This is a platform where you can manage your TuitionIQ
           dashboard, student management, payment tracking, or anything else.
         </p>

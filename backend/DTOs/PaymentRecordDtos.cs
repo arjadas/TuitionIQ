@@ -40,7 +40,7 @@ namespace TuitionIQ.DTOs
   // For returning payment data
   public class PaymentRecordDto
   {
-    public int PaymentRecordId { get; set; }
+    public int Id { get; set; }
     public int StudentId { get; set; }
     public string StudentName { get; set; } = string.Empty;
     public int BillYear { get; set; }

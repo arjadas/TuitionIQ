@@ -6,7 +6,7 @@ namespace TuitionIQ.Models
   public class PaymentRecord
   {
     [Key]
-    public int PaymentRecordId { get; set; }
+    public int Id { get; set; }
 
     [Required]
     [ForeignKey("StudentId")]

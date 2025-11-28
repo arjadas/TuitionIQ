@@ -19,7 +19,7 @@ namespace TuitionIQ.Migrations
 
             modelBuilder.Entity("TuitionIQ.Models.PaymentRecord", b =>
                 {
-                    b.Property<int>("PaymentRecordId")
+                    b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
@@ -46,7 +46,7 @@ namespace TuitionIQ.Migrations
                     b.Property<int>("StudentId")
                         .HasColumnType("INTEGER");
 
-                    b.HasKey("PaymentRecordId");
+                    b.HasKey("Id");
 
                     b.HasIndex("StudentId", "BillYear", "BillMonth")
                         .IsUnique();

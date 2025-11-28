@@ -11,7 +11,7 @@ using TuitionIQ.Data;
 namespace TuitionIQ.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20251126175314_InitialCreate")]
+    [Migration("20251128012334_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -22,7 +22,7 @@ namespace TuitionIQ.Migrations
 
             modelBuilder.Entity("TuitionIQ.Models.PaymentRecord", b =>
                 {
-                    b.Property<int>("PaymentRecordId")
+                    b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
@@ -49,7 +49,7 @@ namespace TuitionIQ.Migrations
                     b.Property<int>("StudentId")
                         .HasColumnType("INTEGER");
 
-                    b.HasKey("PaymentRecordId");
+                    b.HasKey("Id");
 
                     b.HasIndex("StudentId", "BillYear", "BillMonth")
                         .IsUnique();
