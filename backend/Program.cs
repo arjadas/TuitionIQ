@@ -18,9 +18,11 @@ builder.Services.AddCors(options =>
         policy =>
         {
             policy.WithOrigins(
-                    "http://localhost:3000",   // Create React App default
-                    "http://localhost:5173",   // Vite default
-                    "http://localhost:5174")   // Vite fallback port
+                    "http://localhost:3000",     // Create React App default
+                    "http://localhost:5173",     // Vite default
+                    "http://localhost:5174",     // Vite fallback port
+                    "http://192.168.0.3:5173",   // Local network access (your IP)
+                    "http://192.168.0.3:5174")   // Local network access (fallback)
                 .AllowAnyHeader()
                 .AllowAnyMethod();
         });
