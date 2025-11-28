@@ -1,73 +1,15 @@
-# React + TypeScript + Vite
+## Naming conventions (recommended)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Use consistent file and folder naming to make the frontend codebase predictable and easy to navigate. Recommended conventions:
 
-Currently, two official plugins are available:
+- **Components:** PascalCase, `.tsx` extension. One component per file. Example: `src/components/StudentCard.tsx`.
+- **Pages / Views:** PascalCase, placed under `src/pages/` or `src/views`. Example: `src/pages/PaymentsPage.tsx`.
+- **Hooks:** `use` prefix + camelCase, `.ts` or `.tsx` (if returning JSX). Example: `src/hooks/usePayments.ts`.
+- **Services / API clients:** camelCase or kebab-case filenames, default export for the client. Example: `src/services/paymentService.ts` or `src/services/payment-service.ts`.
+- **Utilities / helpers:** camelCase, grouped in `src/utils/`. Example: `src/utils/formatDate.ts`.
+- **Types:** keep TypeScript type declarations in `src/types/` and name files after the domain model. Prefer `payment-record.types.ts` or `paymentRecord.types.ts`. Example: `src/types/payment-record.types.ts`.
+- **Styles:** colocate component styles (e.g., `StudentCard.module.css` or `StudentCard.module.scss`) or use a global `src/styles/` for shared tokens.
+- **Assets:** store under `src/assets/` and use kebab-case for filenames, e.g. `src/assets/logo.svg`.
+- **Tests:** use the same filename as the subject plus `.test.ts` / `.test.tsx`. Example: `StudentCard.test.tsx`.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
-## React Compiler
-
-The React Compiler is currently not compatible with SWC. See [this issue](https://github.com/vitejs/vite-plugin-react/issues/428) for tracking the progress.
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
-
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+Consistency tip: prefer one style (kebab-case vs camelCase) for filenames across the project and document it here so contributors follow the same pattern.
