@@ -13,7 +13,7 @@ export const StudentCard: React.FC<StudentCardProps> = ({ student, onEdit, onDel
     <div className="bg-gray-50 rounded-lg p-4 border">
       <div className="flex justify-between items-start mb-3">
         <div>
-          <h4 className="font-semibold text-lg">{student.firstName}{student.lastName}</h4>
+          <h4 className="font-semibold text-lg">{student.firstName} {student.lastName}</h4>
           <p className="text-sm text-gray-600">{student.email}</p>
         </div>
         <div className="flex gap-2">
