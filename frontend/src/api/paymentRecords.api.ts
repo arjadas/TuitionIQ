@@ -31,37 +31,48 @@ const transformPaymentRecord = (record: PaymentRecordResponse): PaymentRecord =>
 };
 
 export const paymentRecordsApi = {
-  getAll: async (params?: { studentId?: number; isPaid?: boolean; year?: number; month?: number }) => {
-    const queryString = params 
-      ? '?' + new URLSearchParams(
-          Object.entries(params)
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            .filter(([_, v]) => v !== undefined)
-            .map(([k, v]) => [k, String(v)])
-        ).toString()
-      : '';
-    const records = await apiClient.get<PaymentRecordResponse[]>(`${ENDPOINTS.PAYMENT_RECORDS}${queryString}`);
+  /**
+   * Fetches all payment records.
+   */
+  getAll: async () => {
+    const records = await apiClient.get<PaymentRecordResponse[]>(ENDPOINTS.PAYMENT_RECORDS);
     return records.map(transformPaymentRecord);
   },
-  
+
+  /**
+   * Fetches a single payment record by ID.
+   */
   getById: async (id: number) => {
     const record = await apiClient.get<PaymentRecordResponse>(`${ENDPOINTS.PAYMENT_RECORDS}/${id}`);
     return transformPaymentRecord(record);
   },
-  
+
+  /**
+   * Fetches all payment records for a specific student.
+   */
+  getByStudentId: async (studentId: number) => {
+    const records = await apiClient.get<PaymentRecordResponse[]>(
+      `${ENDPOINTS.PAYMENT_RECORDS}/student/${studentId}`
+    );
+    return records.map(transformPaymentRecord);
+  },
+
+  /**
+   * Creates a new payment record.
+   */
   create: async (data: CreatePaymentRecordDto) => {
     const record = await apiClient.post<PaymentRecordResponse>(ENDPOINTS.PAYMENT_RECORDS, data);
     return transformPaymentRecord(record);
   },
-  
-  updateStatus: (id: number, data: UpdatePaymentStatusDto) => 
+
+  /**
+   * Updates the payment status of a record.
+   */
+  updateStatus: (id: number, data: UpdatePaymentStatusDto) =>
     apiClient.patch<void>(`${ENDPOINTS.PAYMENT_RECORDS}/${id}/status`, data),
-  
+
+  /**
+   * Deletes a payment record.
+   */
   delete: (id: number) => apiClient.delete<void>(`${ENDPOINTS.PAYMENT_RECORDS}/${id}`),
-  
-  generateMonthly: (year: number, month: number) => 
-    apiClient.post<{ message: string; count: number }>(
-      `${ENDPOINTS.PAYMENT_RECORDS}/generate?year=${year}&month=${month}`,
-      {}
-    ),
 };
