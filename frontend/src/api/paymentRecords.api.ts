@@ -18,7 +18,7 @@ interface PaymentRecordResponse {
 
 // Transform backend response to frontend PaymentRecord with computed fields
 const transformPaymentRecord = (record: PaymentRecordResponse): PaymentRecord => {
-  const dueDate = new Date(record.billYear, record.billMonth - 1, 1); // 1st of the billing month
+  const dueDate = new Date(record.billYear, record.billMonth - 1, 10); // 10th of the billing month
   const now = new Date();
   
   return {
