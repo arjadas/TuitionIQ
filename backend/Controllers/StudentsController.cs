@@ -23,7 +23,6 @@ public class StudentsController : ControllerBase
   public async Task<ActionResult<IEnumerable<StudentDto>>> GetStudents()
   {
     var students = await _context.Students
-        .Include(s => s.PaymentRecords)
         .Select(s => s.ToDto())
         .ToListAsync();
 
@@ -35,7 +34,6 @@ public class StudentsController : ControllerBase
   public async Task<ActionResult<StudentDto>> GetStudent(int id)
   {
     var student = await _context.Students
-        .Include(s => s.PaymentRecords)
         .FirstOrDefaultAsync(s => s.Id == id);
 
     if (student == null)

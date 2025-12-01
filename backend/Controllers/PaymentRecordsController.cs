@@ -91,8 +91,8 @@ public class PaymentRecordsController : ControllerBase
     return CreatedAtAction(nameof(GetPaymentRecord), new { id = paymentRecord.Id }, paymentRecord.ToDto());
   }
 
-  // PUT: api/paymentrecords/{id}/status
-  [HttpPut("{id}/status")]
+  // PATCH: api/paymentrecords/{id}/status
+  [HttpPatch("{id}/status")]
   public async Task<IActionResult> UpdatePaymentStatus(int id, UpdatePaymentStatusDto dto)
   {
     var paymentRecord = await _context.PaymentRecords.FindAsync(id);

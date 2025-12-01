@@ -12,12 +12,12 @@ public class PaymentRecord
   public int Id { get; set; }
 
   [Required]
-  [ForeignKey("StudentId")]
   public int StudentId { get; set; }
 
   /// <summary>
   /// Navigation property to the associated student.
   /// </summary>
+  [ForeignKey("StudentId")]
   public required Student Student { get; set; }
 
   [Required]

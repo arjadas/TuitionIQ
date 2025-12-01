@@ -25,6 +25,6 @@ export interface CreatePaymentRecordDto {
 
 export interface UpdatePaymentStatusDto {
   isPaid: boolean;
-  paymentDate?: Date;
+  paymentDate?: string;  // ISO date string to avoid timezone issues
   notes?: string;
 }
