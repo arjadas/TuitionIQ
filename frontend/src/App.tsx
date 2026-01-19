@@ -18,7 +18,7 @@ function App() {
           fontWeight: "bold",
         }}
       >
-        🚧 This application is still in development 🚧
+        🚧 TuitionIQ is currently under development 🚧
       </div>
 
 
@@ -60,9 +60,9 @@ function App() {
             lineHeight: "1.5",
           }}
         >
-          Welcome to TuitionIQ!  
-          This is a platform where you can manage your TuitionIQ
-          dashboard, student management, payment tracking, or anything else.
+          Welcome to TuitionIQ! <br />
+          Your all-in-one student management platform. <br /> <br />
+          Manage students, track payments, and organize your tuition operations seamlessly from a single dashboard.
         </p>
 
         <button
