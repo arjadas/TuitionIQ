@@ -1,6 +1,6 @@
 # TuitionIQ
 
-TuitionIQ is a small full-stack application to manage students and their tuition billing records.
+TuitionIQ is a full-stack application to manage students and their tuition billing records.
 
 Tech stack
 
