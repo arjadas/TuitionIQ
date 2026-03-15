@@ -11,18 +11,50 @@ builder.Services.AddControllers();
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// Configure CORS to allow React frontend
+static bool IsAllowedDevOrigin(string? origin)
+{
+    if (string.IsNullOrWhiteSpace(origin))
+    {
+        return false;
+    }
+
+    if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri))
+    {
+        return false;
+    }
+
+    var host = uri.Host.ToLowerInvariant();
+
+    if (host == "localhost" || host == "127.0.0.1" || host == "::1")
+    {
+        return true;
+    }
+
+    // Allow common local network ranges for mobile/web dev access.
+    if (host.StartsWith("192.168.") || host.StartsWith("10."))
+    {
+        return true;
+    }
+
+    if (host.StartsWith("172."))
+    {
+        var parts = host.Split('.');
+        if (parts.Length > 1 && int.TryParse(parts[1], out var secondOctet))
+        {
+            return secondOctet >= 16 && secondOctet <= 31;
+        }
+    }
+
+    return false;
+}
+
+// Configure CORS for local web frontends (Vite/Expo web).
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowReactApp",
         policy =>
         {
-            policy.WithOrigins(
-                    "http://localhost:3000",     // Create React App default
-                    "http://localhost:5173",     // Vite default
-                    "http://localhost:5174",     // Vite fallback port
-                    "http://192.168.0.3:5173",   // Local network access (your IP)
-                    "http://192.168.0.3:5174")   // Local network access (fallback)
+            policy.SetIsOriginAllowed(origin => builder.Environment.IsDevelopment() && IsAllowedDevOrigin(origin))
                 .AllowAnyHeader()
                 .AllowAnyMethod();
         });
