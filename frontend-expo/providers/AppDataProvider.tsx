@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo } from 'react';
+import { createContext, useContext, useMemo, useCallback } from 'react';
 import type { ReactNode } from 'react';
 
 import { usePaymentRecords } from '@/hooks/usePaymentRecords';
@@ -26,9 +26,12 @@ export const AppDataProvider = ({ children }: { children: ReactNode }) => {
   const studentsState = useStudents();
   const paymentRecordsState = usePaymentRecords();
 
-  const refreshAll = async () => {
-    await Promise.all([studentsState.fetchStudents(), paymentRecordsState.fetchPaymentRecords()]);
-  };
+  const refreshAll = useCallback(async () => {
+    await Promise.all([
+      studentsState.fetchStudents(),
+      paymentRecordsState.fetchPaymentRecords(),
+    ]);
+  }, [studentsState.fetchStudents, paymentRecordsState.fetchPaymentRecords]);
 
   const value = useMemo<AppDataContextValue>(
     () => ({
@@ -45,7 +48,20 @@ export const AppDataProvider = ({ children }: { children: ReactNode }) => {
       togglePaymentStatus: paymentRecordsState.togglePaymentStatus,
       refreshAll,
     }),
-    [studentsState, paymentRecordsState]
+    [
+      studentsState.students,
+      paymentRecordsState.paymentRecords,
+      studentsState.loading,
+      paymentRecordsState.loading,
+      studentsState.error,
+      paymentRecordsState.error,
+      studentsState.createStudent,
+      studentsState.updateStudent,
+      studentsState.deleteStudent,
+      paymentRecordsState.createPaymentRecord,
+      paymentRecordsState.togglePaymentStatus,
+      refreshAll,
+    ]
   );
 
   return <AppDataContext.Provider value={value}>{children}</AppDataContext.Provider>;
