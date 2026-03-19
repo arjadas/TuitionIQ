@@ -42,6 +42,32 @@ export default function StudentFormScreen() {
     navigation.setOptions({ title: editingStudent ? 'Edit Student' : 'Add Student' });
   }, [editingStudent, navigation]);
 
+  useEffect(() => {
+    // When editing an existing student, populate the form once the student data becomes available,
+    // but avoid overwriting any fields the user may already have started editing.
+    if (!id || !editingStudent) {
+      return;
+    }
+
+    setFormData((prev) => {
+      const hasUserEdited =
+        prev.firstName.trim() !== '' ||
+        prev.lastName.trim() !== '' ||
+        prev.email.trim() !== '';
+
+      if (hasUserEdited) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        firstName: editingStudent.firstName ?? '',
+        lastName: editingStudent.lastName ?? '',
+        email: editingStudent.email ?? '',
+      };
+    });
+  }, [editingStudent, id]);
+
   const validate = () => {
     const nextErrors: FormErrors = {};
 
