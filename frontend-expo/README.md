@@ -45,16 +45,6 @@ You can start developing by editing the files inside the **app** directory. This
 - iOS simulator / web: use `http://localhost:5000/api`
 - Physical device (Expo Go): use your machine LAN IP, e.g. `http://192.168.x.x:5000/api`
 
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
-```
-
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
-
 ## Learn more
 
 To learn more about developing your project with Expo, look at the following resources:

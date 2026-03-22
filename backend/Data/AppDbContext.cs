@@ -3,16 +3,16 @@ using TuitionIQ.Models;
 
 namespace TuitionIQ.Data;
 
-/// Database context - manages database connection and entity operations.
+// Database context - manages database connection and entity operations.
 public class AppDbContext : DbContext
 {
   public AppDbContext(DbContextOptions<AppDbContext> options)
       : base(options) { }
 
-  /// Students table.
+  // Students table.
   public DbSet<Student> Students { get; set; }
 
-  /// Payment records table.
+  // Payment records table.
   public DbSet<PaymentRecord> PaymentRecords { get; set; }
 
   protected override void OnModelCreating(ModelBuilder modelBuilder)
