@@ -1,0 +1,508 @@
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap');
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --b:#1D4ED8;--t:#0D9488;--r:#DC2626;--w:#D97706;
+    --bg:#F1F5F9;--surf:#FFFFFF;--t1:#0F172A;--t2:#64748B;--bdr:#E2E8F0;
+    --radius:14px;--gap:12px;
+  }
+  body{font-family:'DM Sans',sans-serif;background:var(--color-background-tertiary,#f5f5f3);padding:16px 8px;display:flex;flex-direction:column;align-items:center;gap:20px}
+  h3{font-size:13px;font-weight:500;color:var(--color-text-secondary);letter-spacing:.04em;text-transform:uppercase;margin-bottom:4px;text-align:center}
+  .row{display:flex;gap:16px;flex-wrap:wrap;justify-content:center;align-items:flex-start;width:100%}
+  .phone{width:280px;background:var(--surf);border-radius:28px;border:2px solid var(--bdr);overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08);flex-shrink:0}
+  .status-bar{background:#f8fafc;padding:10px 18px 6px;display:flex;justify-content:space-between;align-items:center;font-size:11px;font-weight:600;color:var(--t1);border-bottom:1px solid var(--bdr)}
+  .screen{background:var(--bg);min-height:540px;display:flex;flex-direction:column}
+  .screen-header{background:var(--surf);padding:14px 16px 12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--bdr)}
+  .screen-title{font-size:17px;font-weight:600;color:var(--t1)}
+  .screen-body{flex:1;padding:14px;overflow:hidden;display:flex;flex-direction:column;gap:10px}
+  .avatar{width:32px;height:32px;border-radius:50%;background:#dbeafe;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:#1d4ed8}
+  .greeting{font-size:13px;color:var(--t2)}
+  .greeting strong{color:var(--t1)}
+
+  /* Stats grid */
+  .stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .stat{background:var(--surf);border-radius:12px;padding:11px 12px;display:flex;justify-content:space-between;align-items:center;border:1px solid var(--bdr)}
+  .stat-left label{font-size:11px;color:var(--t2);display:block;margin-bottom:3px}
+  .stat-left .val{font-size:20px;font-weight:600;color:var(--t1)}
+  .stat-left .val.red{color:var(--r)}
+  .stat-icon{width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:15px}
+  .si-blue{background:#dbeafe}
+  .si-teal{background:#ccfbf1}
+  .si-red{background:#fee2e2}
+  .si-sky{background:#e0f2fe}
+
+  /* Section */
+  .section-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+  .section-head span{font-size:13px;font-weight:600;color:var(--t1)}
+  .section-head a{font-size:11px;color:var(--b)}
+
+  /* Attention card */
+  .attn-card{background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:10px 12px;display:flex;justify-content:space-between;align-items:center}
+  .attn-card .info label{font-size:12px;font-weight:600;color:var(--t1);display:block}
+  .attn-card .info small{font-size:11px;color:var(--w)}
+  .btn-rec{background:#0D9488;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer}
+
+  /* Payment card */
+  .pay-card{background:var(--surf);border:1px solid var(--bdr);border-radius:12px;padding:11px 13px}
+  .pay-card .top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px}
+  .pay-card .name{font-size:13px;font-weight:600;color:var(--t1)}
+  .pay-card .period{font-size:11px;color:var(--t2)}
+  .pay-card .mid{display:flex;align-items:center;gap:8px}
+  .pay-card .amount{font-size:14px;font-weight:600;color:var(--t1)}
+  .badge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:99px;font-size:10px;font-weight:600}
+  .badge.paid{background:#ccfbf1;color:#0f6e56}
+  .badge.unpaid{background:#f1f5f9;color:#475569}
+  .badge.overdue{background:#fee2e2;color:#991b1b}
+  .badge.partial{background:#fef3c7;color:#92400e}
+  .pay-card .dates{margin-top:4px;font-size:10px;color:var(--t2)}
+
+  /* CTA row */
+  .cta-row{display:flex;gap:8px;margin-top:auto}
+  .btn-primary{flex:1;background:var(--b);color:#fff;border:none;border-radius:12px;padding:11px;font-size:13px;font-weight:600;cursor:pointer}
+  .btn-action{flex:1;background:var(--t);color:#fff;border:none;border-radius:12px;padding:11px;font-size:13px;font-weight:600;cursor:pointer}
+
+  /* Nav */
+  .bottom-nav{background:var(--surf);border-top:1px solid var(--bdr);display:flex;padding:8px 0 10px}
+  .nav-item{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer}
+  .nav-icon{font-size:18px;line-height:1}
+  .nav-label{font-size:10px;font-weight:500;color:var(--t2)}
+  .nav-item.active .nav-label{color:var(--b)}
+  .nav-item.active .nav-icon{opacity:1;filter:none}
+  .nav-item:not(.active) .nav-icon{opacity:.45}
+
+  /* Students screen */
+  .search-row{display:flex;gap:8px}
+  .search-input{flex:1;background:var(--surf);border:1px solid var(--bdr);border-radius:12px;padding:9px 12px;font-size:13px;color:var(--t2)}
+  .btn-add{background:var(--b);color:#fff;border:none;border-radius:12px;padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer}
+  .student-card{background:var(--surf);border:1px solid var(--bdr);border-radius:12px;padding:12px 13px;display:flex;align-items:center;gap:10px}
+  .s-dot{width:8px;height:8px;border-radius:50%;background:#22c55e;flex-shrink:0}
+  .s-dot.inactive{background:var(--bdr)}
+  .s-info{flex:1}
+  .s-name{font-size:13px;font-weight:600;color:var(--t1)}
+  .s-email{font-size:11px;color:var(--t2)}
+  .swipe-hint{font-size:10px;color:var(--t2);text-align:center;padding:6px;border:1px dashed var(--bdr);border-radius:8px;margin-top:2px}
+
+  /* Record payment */
+  .step-pills{display:flex;gap:6px;justify-content:center;margin-bottom:4px}
+  .step-pill{height:5px;border-radius:99px;flex:1;background:var(--bdr)}
+  .step-pill.done{background:var(--t)}
+  .step-pill.active{background:var(--b)}
+  .step-label{font-size:11px;color:var(--t2);text-align:center;margin-bottom:10px}
+  .form-label{font-size:11px;color:var(--t2);font-weight:500;margin-bottom:4px}
+  .form-input{width:100%;background:var(--surf);border:1px solid var(--bdr);border-radius:10px;padding:10px 12px;font-size:14px;color:var(--t1)}
+  .amount-input{position:relative}
+  .amount-input .currency{position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:14px;font-weight:600;color:var(--t2)}
+  .amount-input input{padding-left:28px}
+  .method-row{display:flex;gap:6px;flex-wrap:wrap}
+  .method-chip{padding:6px 10px;border:1px solid var(--bdr);border-radius:8px;font-size:11px;font-weight:500;color:var(--t2);background:var(--surf);cursor:pointer}
+  .method-chip.sel{border-color:var(--t);background:#ccfbf1;color:#0f6e56}
+  .student-select-item{background:var(--surf);border:1px solid var(--bdr);border-radius:10px;padding:10px 12px;display:flex;justify-content:space-between;align-items:center;cursor:pointer}
+  .student-select-item.sel{border-color:var(--t);background:#f0fdfa}
+  .period-item{background:var(--surf);border:1px solid var(--bdr);border-radius:10px;padding:10px 12px;display:flex;justify-content:space-between;align-items:center;cursor:pointer}
+  .period-item.sel{border-color:var(--t);background:#f0fdfa}
+  .outstanding{font-size:11px;color:var(--r);font-weight:500}
+
+  /* Student detail */
+  .student-hero{background:var(--surf);border:1px solid var(--bdr);border-radius:14px;padding:14px;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center}
+  .big-avatar{width:52px;height:52px;border-radius:50%;background:#dbeafe;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:600;color:#1d4ed8}
+  .hero-name{font-size:16px;font-weight:600;color:var(--t1)}
+  .hero-detail{font-size:12px;color:var(--t2)}
+  .fee-card{background:var(--surf);border:1px solid var(--bdr);border-radius:12px;padding:11px 13px}
+  .fee-card .fee-row{display:flex;justify-content:space-between;align-items:center}
+  .fee-card .fee-amount{font-size:18px;font-weight:600;color:var(--t1)}
+  .fee-card .fee-label{font-size:11px;color:var(--t2);margin-bottom:2px}
+  .btn-ghost{background:transparent;border:1px solid var(--bdr);border-radius:8px;padding:6px 12px;font-size:11px;font-weight:600;color:var(--t1);cursor:pointer}
+  .fab{position:relative;align-self:flex-end;background:var(--t);color:#fff;border:none;border-radius:12px;padding:10px 16px;font-size:12px;font-weight:600;cursor:pointer;margin-top:auto}
+</style>
+
+<div style="width:100%;max-width:960px">
+
+<h3>TuitionIQ — Redesigned MVP Screens</h3>
+
+<div class="row" style="margin-top:8px">
+
+  <!-- SCREEN 1: DASHBOARD -->
+  <div>
+    <p style="font-size:11px;color:var(--color-text-secondary);text-align:center;margin-bottom:6px;font-weight:500">01 Dashboard</p>
+    <div class="phone">
+      <div class="status-bar"><span>9:41</span><span>●●●</span></div>
+      <div class="screen">
+        <div class="screen-header">
+          <div>
+            <div class="greeting">Good morning, <strong>Alex</strong></div>
+            <div style="font-size:11px;color:var(--t2);margin-top:1px">Wednesday, 18 Mar</div>
+          </div>
+          <div class="avatar">AJ</div>
+        </div>
+        <div class="screen-body">
+          <!-- Stats -->
+          <div class="stats">
+            <div class="stat">
+              <div class="stat-left"><label>Overdue</label><div class="val red">2</div></div>
+              <div class="stat-icon si-red">⚠</div>
+            </div>
+            <div class="stat">
+              <div class="stat-left"><label>Outstanding</label><div class="val">£540</div></div>
+              <div class="stat-icon si-teal">$</div>
+            </div>
+            <div class="stat">
+              <div class="stat-left"><label>Students</label><div class="val">12</div></div>
+              <div class="stat-icon si-blue">👤</div>
+            </div>
+            <div class="stat">
+              <div class="stat-left"><label>This Month</label><div class="val">3</div></div>
+              <div class="stat-icon si-sky">📅</div>
+            </div>
+          </div>
+
+          <!-- Needs Attention -->
+          <div>
+            <div class="section-head"><span>Needs Attention</span><span style="background:#fee2e2;color:#991b1b;border-radius:99px;padding:2px 7px;font-size:10px;font-weight:600">2</span></div>
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <div class="attn-card">
+                <div class="info"><label>Sarah Mitchell</label><small>Nov 2025 · £120 overdue</small></div>
+                <button class="btn-rec">Record</button>
+              </div>
+              <div class="attn-card">
+                <div class="info"><label>Tom Baker</label><small>Oct 2025 · £85 overdue</small></div>
+                <button class="btn-rec">Record</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Recent Activity -->
+          <div>
+            <div class="section-head"><span>Recent Activity</span><a>See all</a></div>
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <div class="pay-card">
+                <div class="top"><div class="name">Test 2</div><div class="period">Dec 2025</div></div>
+                <div class="mid"><div class="amount">£2,500</div><span class="badge paid">✓ Paid</span></div>
+                <div class="dates">Paid 3 Nov 2026</div>
+              </div>
+              <div class="pay-card">
+                <div class="top"><div class="name">Test 1</div><div class="period">Nov 2025</div></div>
+                <div class="mid"><div class="amount">£3,000</div><span class="badge paid">✓ Paid</span></div>
+                <div class="dates">Paid 12 Apr 2025</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- CTAs -->
+          <div class="cta-row">
+            <button class="btn-primary">+ Add Student</button>
+            <button class="btn-action">+ Record Payment</button>
+          </div>
+        </div>
+        <div class="bottom-nav">
+          <div class="nav-item active"><div class="nav-icon">📊</div><div class="nav-label">Dashboard</div></div>
+          <div class="nav-item"><div class="nav-icon">👥</div><div class="nav-label">Students</div></div>
+          <div class="nav-item"><div class="nav-icon">💳</div><div class="nav-label">Payments</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCREEN 2: STUDENTS LIST -->
+  <div>
+    <p style="font-size:11px;color:var(--color-text-secondary);text-align:center;margin-bottom:6px;font-weight:500">02 Students List</p>
+    <div class="phone">
+      <div class="status-bar"><span>9:41</span><span>●●●</span></div>
+      <div class="screen">
+        <div class="screen-header">
+          <div class="screen-title">Students</div>
+          <button class="btn-add">+ Add</button>
+        </div>
+        <div class="screen-body">
+          <div class="search-row">
+            <div class="search-input" style="display:flex;align-items:center;gap:6px;color:var(--t2);font-size:13px">🔍 Search students...</div>
+          </div>
+
+          <div class="student-card">
+            <div class="s-dot"></div>
+            <div class="s-info">
+              <div class="s-name">Sarah Mitchell</div>
+              <div class="s-email">sarah@test.com · Year 10</div>
+            </div>
+            <span class="badge overdue">Overdue</span>
+          </div>
+
+          <div class="student-card">
+            <div class="s-dot"></div>
+            <div class="s-info">
+              <div class="s-name">Tom Baker</div>
+              <div class="s-email">tom@test.com · Year 8</div>
+            </div>
+            <span class="badge overdue">Overdue</span>
+          </div>
+
+          <div class="student-card">
+            <div class="s-dot"></div>
+            <div class="s-info">
+              <div class="s-name">Test 1</div>
+              <div class="s-email">test@test.com</div>
+            </div>
+            <span class="badge paid">Paid</span>
+          </div>
+
+          <div class="student-card">
+            <div class="s-dot"></div>
+            <div class="s-info">
+              <div class="s-name">Test 2</div>
+              <div class="s-email">test2@test.com</div>
+            </div>
+            <span class="badge paid">Paid</span>
+          </div>
+
+          <div class="swipe-hint">← Swipe a card to edit or delete</div>
+        </div>
+        <div class="bottom-nav">
+          <div class="nav-item"><div class="nav-icon">📊</div><div class="nav-label">Dashboard</div></div>
+          <div class="nav-item active"><div class="nav-icon">👥</div><div class="nav-label">Students</div></div>
+          <div class="nav-item"><div class="nav-icon">💳</div><div class="nav-label">Payments</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCREEN 3: STUDENT DETAIL -->
+  <div>
+    <p style="font-size:11px;color:var(--color-text-secondary);text-align:center;margin-bottom:6px;font-weight:500">03 Student Detail</p>
+    <div class="phone">
+      <div class="status-bar"><span>9:41</span><span>●●●</span></div>
+      <div class="screen">
+        <div class="screen-header">
+          <div style="font-size:14px;color:var(--b);cursor:pointer">← Back</div>
+          <div class="screen-title">Sarah Mitchell</div>
+          <div style="font-size:13px;color:var(--b);cursor:pointer">Edit</div>
+        </div>
+        <div class="screen-body">
+          <div class="student-hero">
+            <div class="big-avatar">SM</div>
+            <div class="hero-name">Sarah Mitchell</div>
+            <div class="hero-detail">sarah@test.com · +44 7900 000001</div>
+            <div class="hero-detail">Year 10 · Active</div>
+          </div>
+
+          <div class="fee-card">
+            <div class="fee-label">Current Monthly Fee</div>
+            <div class="fee-row">
+              <div class="fee-amount">£120.00</div>
+              <button class="btn-ghost">Change Fee</button>
+            </div>
+            <div style="font-size:11px;color:var(--t2);margin-top:4px">Effective from 1 Jan 2025 · Set by you</div>
+          </div>
+
+          <div>
+            <div class="section-head"><span>Payment History</span></div>
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <div class="pay-card">
+                <div class="top"><div class="name">November 2025</div><span class="badge overdue">Overdue</span></div>
+                <div class="mid"><div class="amount">£120</div><div style="font-size:11px;color:var(--t2);margin-left:4px">owed</div></div>
+                <div class="dates">Due 10 Nov 2025</div>
+              </div>
+              <div class="pay-card">
+                <div class="top"><div class="name">October 2025</div><span class="badge paid">Paid</span></div>
+                <div class="mid"><div class="amount">£120</div></div>
+                <div class="dates">Paid 5 Oct 2025</div>
+              </div>
+            </div>
+          </div>
+
+          <button class="fab">+ Record Payment</button>
+        </div>
+        <div class="bottom-nav">
+          <div class="nav-item"><div class="nav-icon">📊</div><div class="nav-label">Dashboard</div></div>
+          <div class="nav-item active"><div class="nav-icon">👥</div><div class="nav-label">Students</div></div>
+          <div class="nav-item"><div class="nav-icon">💳</div><div class="nav-label">Payments</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="row" style="margin-top:0">
+
+  <!-- SCREEN 4: RECORD PAYMENT STEP 1 -->
+  <div>
+    <p style="font-size:11px;color:var(--color-text-secondary);text-align:center;margin-bottom:6px;font-weight:500">04 Record Payment — Step 1</p>
+    <div class="phone">
+      <div class="status-bar"><span>9:41</span><span>●●●</span></div>
+      <div class="screen">
+        <div class="screen-header">
+          <div style="font-size:14px;color:var(--t2);cursor:pointer">Cancel</div>
+          <div class="screen-title">Record Payment</div>
+          <div style="width:48px"></div>
+        </div>
+        <div class="screen-body">
+          <div class="step-pills"><div class="step-pill active"></div><div class="step-pill"></div><div class="step-pill"></div></div>
+          <div class="step-label">Step 1 of 3 — Select Student</div>
+
+          <div class="search-row">
+            <div class="search-input" style="display:flex;align-items:center;gap:6px;color:var(--t2);font-size:13px">🔍 Search student...</div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <div class="student-select-item sel">
+              <div>
+                <div style="font-size:13px;font-weight:600;color:var(--t1)">Sarah Mitchell</div>
+                <div class="outstanding">£120 outstanding</div>
+              </div>
+              <div style="color:var(--t);font-size:16px">✓</div>
+            </div>
+            <div class="student-select-item">
+              <div>
+                <div style="font-size:13px;font-weight:600;color:var(--t1)">Tom Baker</div>
+                <div class="outstanding">£85 outstanding</div>
+              </div>
+            </div>
+            <div class="student-select-item">
+              <div>
+                <div style="font-size:13px;font-weight:600;color:var(--t1)">Test 1</div>
+                <div style="font-size:11px;color:var(--t2)">No outstanding balance</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="cta-row" style="margin-top:auto">
+            <button class="btn-action" style="flex:1">Next →</button>
+          </div>
+        </div>
+        <div class="bottom-nav">
+          <div class="nav-item"><div class="nav-icon">📊</div><div class="nav-label">Dashboard</div></div>
+          <div class="nav-item"><div class="nav-icon">👥</div><div class="nav-label">Students</div></div>
+          <div class="nav-item active"><div class="nav-icon">💳</div><div class="nav-label">Payments</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCREEN 5: RECORD PAYMENT STEP 3 -->
+  <div>
+    <p style="font-size:11px;color:var(--color-text-secondary);text-align:center;margin-bottom:6px;font-weight:500">05 Record Payment — Step 3</p>
+    <div class="phone">
+      <div class="status-bar"><span>9:41</span><span>●●●</span></div>
+      <div class="screen">
+        <div class="screen-header">
+          <div style="font-size:14px;color:var(--t2);cursor:pointer">← Back</div>
+          <div class="screen-title">Enter Payment</div>
+          <div style="width:48px"></div>
+        </div>
+        <div class="screen-body">
+          <div class="step-pills"><div class="step-pill done"></div><div class="step-pill done"></div><div class="step-pill active"></div></div>
+          <div class="step-label">Step 3 of 3 — Payment details</div>
+
+          <div style="background:#f0fdfa;border:1px solid #99f6e4;border-radius:10px;padding:10px 12px;font-size:12px;color:#0f6e56;display:flex;justify-content:space-between">
+            <span>Sarah Mitchell · Nov 2025</span>
+            <strong>£120 owed</strong>
+          </div>
+
+          <div>
+            <div class="form-label">Amount</div>
+            <div class="amount-input">
+              <span class="currency">£</span>
+              <div class="form-input" style="padding-left:28px;color:var(--t1);font-weight:600">120.00</div>
+            </div>
+          </div>
+          <div>
+            <div class="form-label">Payment Date</div>
+            <div class="form-input" style="color:var(--t1)">Today, 18 Mar 2026</div>
+          </div>
+          <div>
+            <div class="form-label">Method</div>
+            <div class="method-row">
+              <div class="method-chip sel">Cash</div>
+              <div class="method-chip">Bank transfer</div>
+              <div class="method-chip">Card</div>
+              <div class="method-chip">Cheque</div>
+            </div>
+          </div>
+          <div>
+            <div class="form-label">Reference (optional)</div>
+            <div class="form-input" style="color:var(--t2)">e.g. bank ref, cheque no.</div>
+          </div>
+
+          <div class="cta-row" style="margin-top:auto">
+            <button class="btn-action" style="flex:1">Confirm Payment ✓</button>
+          </div>
+        </div>
+        <div class="bottom-nav">
+          <div class="nav-item"><div class="nav-icon">📊</div><div class="nav-label">Dashboard</div></div>
+          <div class="nav-item"><div class="nav-icon">👥</div><div class="nav-label">Students</div></div>
+          <div class="nav-item active"><div class="nav-icon">💳</div><div class="nav-label">Payments</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCREEN 6: PAYMENTS LIST -->
+  <div>
+    <p style="font-size:11px;color:var(--color-text-secondary);text-align:center;margin-bottom:6px;font-weight:500">06 Payments List</p>
+    <div class="phone">
+      <div class="status-bar"><span>9:41</span><span>●●●</span></div>
+      <div class="screen">
+        <div class="screen-header">
+          <div class="screen-title">Payments</div>
+          <button class="btn-add" style="background:var(--t)">Record</button>
+        </div>
+        <div class="screen-body">
+          <!-- Filter chips -->
+          <div style="display:flex;gap:6px;overflow:hidden">
+            <div style="padding:5px 12px;background:var(--t);color:#fff;border-radius:99px;font-size:11px;font-weight:600;white-space:nowrap">All</div>
+            <div style="padding:5px 12px;background:var(--surf);border:1px solid var(--bdr);color:var(--t2);border-radius:99px;font-size:11px;font-weight:500;white-space:nowrap">Unpaid</div>
+            <div style="padding:5px 12px;background:var(--surf);border:1px solid var(--bdr);color:var(--t2);border-radius:99px;font-size:11px;font-weight:500;white-space:nowrap">Partial</div>
+            <div style="padding:5px 12px;background:var(--surf);border:1px solid var(--bdr);color:var(--t2);border-radius:99px;font-size:11px;font-weight:500;white-space:nowrap">Overdue</div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div class="pay-card">
+              <div class="top"><div class="name">Sarah Mitchell</div><div class="period">Nov 2025</div></div>
+              <div class="mid"><div class="amount">£120</div><span class="badge overdue" style="margin-left:6px">Overdue</span></div>
+              <div class="dates">Due 10 Nov 2025 · Not paid</div>
+            </div>
+            <div class="pay-card">
+              <div class="top"><div class="name">Tom Baker</div><div class="period">Oct 2025</div></div>
+              <div class="mid"><div class="amount">£85</div><span class="badge overdue" style="margin-left:6px">Overdue</span></div>
+              <div class="dates">Due 5 Oct 2025 · Not paid</div>
+            </div>
+            <div class="pay-card">
+              <div class="top"><div class="name">Test 2</div><div class="period">Dec 2025</div></div>
+              <div class="mid"><div class="amount">£2,500</div><span class="badge paid" style="margin-left:6px">Paid</span></div>
+              <div class="dates">Paid 3 Nov 2026</div>
+            </div>
+            <div class="pay-card">
+              <div class="top"><div class="name">Test 1</div><div class="period">Nov 2025</div></div>
+              <div class="mid"><div class="amount">£3,000</div><span class="badge paid" style="margin-left:6px">Paid</span></div>
+              <div class="dates">Paid 12 Apr 2025</div>
+            </div>
+          </div>
+        </div>
+        <div class="bottom-nav">
+          <div class="nav-item"><div class="nav-icon">📊</div><div class="nav-label">Dashboard</div></div>
+          <div class="nav-item"><div class="nav-icon">👥</div><div class="nav-label">Students</div></div>
+          <div class="nav-item active"><div class="nav-icon">💳</div><div class="nav-label">Payments</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Design tokens reference -->
+<div style="background:var(--color-background-secondary);border-radius:var(--border-radius-lg);padding:14px 18px;max-width:880px;width:100%;margin-top:4px">
+  <p style="font-size:12px;font-weight:500;color:var(--color-text-secondary);margin-bottom:10px">Design tokens</p>
+  <div style="display:flex;flex-wrap:wrap;gap:8px">
+    <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--color-text-secondary)"><span style="width:16px;height:16px;border-radius:4px;background:#1D4ED8;display:inline-block"></span>Primary #1D4ED8</div>
+    <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--color-text-secondary)"><span style="width:16px;height:16px;border-radius:4px;background:#0D9488;display:inline-block"></span>Action #0D9488</div>
+    <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--color-text-secondary)"><span style="width:16px;height:16px;border-radius:4px;background:#DC2626;display:inline-block"></span>Danger #DC2626</div>
+    <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--color-text-secondary)"><span style="width:16px;height:16px;border-radius:4px;background:#D97706;display:inline-block"></span>Warning #D97706</div>
+    <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--color-text-secondary)"><span style="width:16px;height:16px;border-radius:4px;background:#F1F5F9;border:1px solid #E2E8F0;display:inline-block"></span>Bg #F1F5F9</div>
+    <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--color-text-secondary)"><span style="width:16px;height:16px;border-radius:4px;background:#FFFFFF;border:1px solid #E2E8F0;display:inline-block"></span>Surface #FFFFFF</div>
+    <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--color-text-secondary)"><span style="width:16px;height:16px;border-radius:4px;background:#0F172A;display:inline-block"></span>Text #0F172A</div>
+    <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--color-text-secondary)"><span style="width:16px;height:16px;border-radius:4px;background:#64748B;display:inline-block"></span>Muted #64748B</div>
+    <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--color-text-secondary)"><span style="width:16px;height:16px;border-radius:4px;background:#E2E8F0;border:1px solid #E2E8F0;display:inline-block"></span>Border #E2E8F0</div>
+  </div>
+</div>
+
+</div>
