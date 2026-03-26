@@ -1,8 +1,10 @@
 # TuitionIQ — Monorepo Architecture
+
 ### Production-Grade Structure for AI Agents & Engineering Teams
+
 **Stack:** React Expo (Web + Mobile) · C# ASP.NET Core · Supabase (PostgreSQL + Auth)
 **Pattern:** Feature-based Clean Architecture (backend) · Feature-based modular screens (frontend)
-**Version:** aligned with `authentication.md` v1.2 · `database_schema.md` v1.5.0
+**Version:** aligned with `authentication.md` v1.3.0 · `database_schema.md` v1.5.1
 
 ---
 
@@ -64,13 +66,13 @@ tuitioniq/                                    ← repository root
 
 **Separation of concerns:**
 
-| Folder | Owner | Purpose |
-|--------|-------|---------|
-| `backend/` | C# team / backend agents | All business logic, financial writes, auth validation |
-| `frontend/` | Expo team / frontend agents | UI, UX, client-side state, Supabase reads |
-| `shared/` | Generated — do not hand-edit | TypeScript types consumed by frontend, sourced from backend |
-| `docs/` | All contributors | Source of truth documents; agents must read before implementing |
-| `scripts/` | DevOps / all contributors | Reproducible local and CI tooling |
+| Folder      | Owner                        | Purpose                                                         |
+| ----------- | ---------------------------- | --------------------------------------------------------------- |
+| `backend/`  | C# team / backend agents     | All business logic, financial writes, auth validation           |
+| `frontend/` | Expo team / frontend agents  | UI, UX, client-side state, Supabase reads                       |
+| `shared/`   | Generated — do not hand-edit | TypeScript types consumed by frontend, sourced from backend     |
+| `docs/`     | All contributors             | Source of truth documents; agents must read before implementing |
+| `scripts/`  | DevOps / all contributors    | Reproducible local and CI tooling                               |
 
 ---
 
@@ -535,6 +537,7 @@ orgStore       → memberships[], selectedOrgId (loaded once at /home; cleared o
 ```
 
 Server state (lists, detail pages) is managed by **TanStack Query (React Query)**:
+
 - Handles caching, background refetch, loading/error states
 - Invalidated on mutations (e.g., after recording a payment, invalidate fee period query)
 - Works identically on web and mobile
@@ -550,6 +553,7 @@ There is no Redux. There is no Context for server data. Global UI state lives in
 **Recommendation: Option A — OpenAPI / Swagger → TypeScript generation**
 
 **Why backend-driven generation is correct for this system:**
+
 - The C# backend is the single source of truth for all DTOs and request/response contracts
 - The frontend must never hand-write types that duplicate backend structures — they will drift
 - OpenAPI is a standard; the toolchain is mature, well-supported, and CI-friendly
@@ -557,20 +561,20 @@ There is no Redux. There is no Context for server data. Global UI state lives in
 
 **Risks and mitigations:**
 
-| Risk | Mitigation |
-|------|-----------|
-| Frontend breaks on DTO rename without warning | CI pipeline runs codegen + TypeScript type-check on every backend PR |
+| Risk                                                | Mitigation                                                                     |
+| --------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Frontend breaks on DTO rename without warning       | CI pipeline runs codegen + TypeScript type-check on every backend PR           |
 | Generated types are verbose or incorrectly nullable | Configure `openapi-typescript` options; review generated output in code review |
-| Circular types from EF navigation properties | Ensure DTOs never expose navigation properties — DTOs are flat value objects |
-| Enum generation inconsistency | Configure `x-enum-varnames` in Swagger; verify string enum generation |
+| Circular types from EF navigation properties        | Ensure DTOs never expose navigation properties — DTOs are flat value objects   |
+| Enum generation inconsistency                       | Configure `x-enum-varnames` in Swagger; verify string enum generation          |
 
 ### 4.2 Tooling
 
-| Tool | Purpose |
-|------|---------|
-| `Swashbuckle.AspNetCore` | Generates `openapi.json` from C# controllers + XML docs |
-| `openapi-typescript` | Converts `openapi.json` → `types.gen.ts` (zero-dependency, fast) |
-| `scripts/codegen-types.sh` | Orchestration script run locally and in CI |
+| Tool                       | Purpose                                                          |
+| -------------------------- | ---------------------------------------------------------------- |
+| `Swashbuckle.AspNetCore`   | Generates `openapi.json` from C# controllers + XML docs          |
+| `openapi-typescript`       | Converts `openapi.json` → `types.gen.ts` (zero-dependency, fast) |
+| `scripts/codegen-types.sh` | Orchestration script run locally and in CI                       |
 
 ### 4.3 Shared Types Directory
 
@@ -590,12 +594,14 @@ shared/
 ### 4.4 Generation Workflow
 
 **Step 1 — Export OpenAPI spec from backend:**
+
 ```bash
 dotnet run --project backend/src/TuitionIQ.Api -- --generate-openapi
 # Outputs: shared/generated/openapi.json
 ```
 
 **Step 2 — Generate TypeScript types:**
+
 ```bash
 npx openapi-typescript shared/generated/openapi.json \
   --output shared/generated/types.gen.ts \
@@ -604,11 +610,13 @@ npx openapi-typescript shared/generated/openapi.json \
 ```
 
 **Step 3 — Verify frontend compiles:**
+
 ```bash
 cd frontend && npx tsc --noEmit
 ```
 
 **Full script (`scripts/codegen-types.sh`):**
+
 ```bash
 #!/bin/bash
 set -e
@@ -628,18 +636,21 @@ echo "✓ Types regenerated and frontend verified."
 ```typescript
 // frontend/src/features/billing/services/billingApiClient.ts
 
-import type { components } from '@tuitioniq/types'
+import type { components } from "@tuitioniq/types";
 
-type FeePeriodDto         = components['schemas']['FeePeriodDto']
-type RecordPaymentRequest = components['schemas']['RecordPaymentRequest']
+type FeePeriodDto = components["schemas"]["FeePeriodDto"];
+type RecordPaymentRequest = components["schemas"]["RecordPaymentRequest"];
 
-export const recordPayment = async (req: RecordPaymentRequest): Promise<FeePeriodDto> => {
-  const response = await apiClient.post('/api/payments', req)
-  return response.data
-}
+export const recordPayment = async (
+  req: RecordPaymentRequest,
+): Promise<FeePeriodDto> => {
+  const response = await apiClient.post("/api/payments", req);
+  return response.data;
+};
 ```
 
 **tsconfig path alias (frontend/tsconfig.json):**
+
 ```json
 {
   "compilerOptions": {
@@ -652,12 +663,12 @@ export const recordPayment = async (req: RecordPaymentRequest): Promise<FeePerio
 
 ### 4.6 When Types Are Regenerated
 
-| Trigger | Action |
-|---------|--------|
-| Backend DTO added or changed | Developer runs `./scripts/codegen-types.sh` before committing |
-| PR opened with backend changes | CI runs codegen + frontend type-check automatically (`codegen.yml`) |
-| DTO deleted | Regeneration removes the type; TypeScript compiler identifies all broken usages |
-| Release branch created | Codegen runs as part of the release validation step |
+| Trigger                        | Action                                                                          |
+| ------------------------------ | ------------------------------------------------------------------------------- |
+| Backend DTO added or changed   | Developer runs `./scripts/codegen-types.sh` before committing                   |
+| PR opened with backend changes | CI runs codegen + frontend type-check automatically (`codegen.yml`)             |
+| DTO deleted                    | Regeneration removes the type; TypeScript compiler identifies all broken usages |
+| Release branch created         | Codegen runs as part of the release validation step                             |
 
 ---
 
@@ -665,7 +676,7 @@ export const recordPayment = async (req: RecordPaymentRequest): Promise<FeePerio
 
 ### 5.1 Core Principle: Frontend Never Writes to the Database
 
-**The frontend communicates exclusively with the C# ASP.NET Core backend for all write operations and sensitive business logic. It communicates with Supabase directly only for authentication and safe, RLS-protected reads.**
+**The frontend communicates exclusively with the C# ASP.NET Core backend for all data reads and writes. It communicates with Supabase directly only for authentication operations.**
 
 This is the correct design for four concrete reasons:
 
@@ -676,44 +687,46 @@ This is the correct design for four concrete reasons:
 
 ### 5.2 Traffic Routing Table
 
-| Operation | Route | Reason |
-|-----------|-------|--------|
-| Magic link send | Supabase `signInWithOtp()` | Auth-layer operation; no business data |
-| Session exchange | Supabase `exchangeCodeForSession()` | Auth-layer operation |
-| Token refresh | Supabase SDK auto-refresh | Auth-layer operation |
-| Sign out | Supabase `signOut()` | Session invalidation |
-| **GET** students list | Supabase PostgREST + RLS | Safe read; RLS enforces org isolation |
-| **GET** fee periods | Supabase PostgREST + RLS | Safe read |
-| **GET** user profile | Supabase PostgREST + RLS | Safe read |
-| **POST** student create | C# API | Requires audit_log in same transaction |
-| **POST** payment | C# API | Financial write; requires teacher→student ownership check |
-| **PATCH** fee config | C# API | Multi-step: close old, open new in one transaction |
-| **POST** invite send | C# API | Email lookup + conditional immediate linking |
-| **POST** invite accept | C# API | Token validation + email match + org membership insert |
-| **PATCH** waive period | C# API | Requires role validation; audit logged |
-| **POST** admin suspend | C# API | Calls Supabase Admin API; sets is_active flag |
+| Operation               | Route                               | Reason                                                    |
+| ----------------------- | ----------------------------------- | --------------------------------------------------------- |
+| Magic link send         | Supabase `signInWithOtp()`          | Auth-layer operation; no business data                    |
+| Session exchange        | Supabase `exchangeCodeForSession()` | Auth-layer operation                                      |
+| Token refresh           | Supabase SDK auto-refresh           | Auth-layer operation                                      |
+| Sign out                | Supabase `signOut()`                | Session invalidation                                      |
+| **GET** students list   | C# API                              | `GET /api/organizations/{orgId}/students`                 |
+| **GET** fee periods     | C# API                              | `GET /api/organizations/{orgId}/periods`                  |
+| **GET** user profile    | C# API                              | `GET /api/users/me`                                       |
+| **POST** student create | C# API                              | Requires audit_log in same transaction                    |
+| **POST** payment        | C# API                              | Financial write; requires teacher→student ownership check |
+| **PATCH** fee config    | C# API                              | Multi-step: close old, open new in one transaction        |
+| **POST** invite send    | C# API                              | Email lookup + conditional immediate linking              |
+| **POST** invite accept  | C# API                              | Token validation + email match + org membership insert    |
+| **PATCH** waive period  | C# API                              | Requires role validation; audit logged                    |
+| **POST** admin suspend  | C# API                              | Calls Supabase Admin API; sets is_active flag             |
 
 ### 5.3 API Client Configuration
 
 ```typescript
 // frontend/src/lib/apiClient.ts
 
-import axios from 'axios'
-import { supabase } from './supabase'
+import axios from "axios";
+import { supabase } from "./supabase";
 
 export const apiClient = axios.create({
   baseURL: process.env.EXPO_PUBLIC_API_BASE_URL,
-  headers: { 'Content-Type': 'application/json' },
-})
+  headers: { "Content-Type": "application/json" },
+});
 
 // Request interceptor: attach current JWT as Bearer token
 apiClient.interceptors.request.use(async (config) => {
-  const { data: { session } } = await supabase.auth.getSession()
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
   if (session?.access_token) {
-    config.headers.Authorization = `Bearer ${session.access_token}`
+    config.headers.Authorization = `Bearer ${session.access_token}`;
   }
-  return config
-})
+  return config;
+});
 
 // Response interceptor: handle 401 (expired session), 403 (suspended account)
 apiClient.interceptors.response.use(
@@ -721,14 +734,14 @@ apiClient.interceptors.response.use(
   async (error) => {
     if (error.response?.status === 401) {
       // SDK will have already attempted refresh; 401 here means session is gone
-      await supabase.auth.signOut()
+      await supabase.auth.signOut();
     }
     if (error.response?.status === 403) {
       // Account suspended mid-session — show suspension message, not raw error
     }
-    return Promise.reject(error)
-  }
-)
+    return Promise.reject(error);
+  },
+);
 ```
 
 ---
@@ -768,32 +781,32 @@ These rules are **AI-agent enforceable**. Violations should fail linting or code
 
 ### 7.1 Backend
 
-| Artifact | Convention | Example |
-|----------|-----------|---------|
-| Entity class | `PascalCase`, singular | `Student`, `FeePeriod` |
-| EF table mapping | `snake_case` via `ToTable()` | `.ToTable("fee_periods")` |
-| DTO suffix | `Dto` or `Request` | `FeePeriodDto`, `RecordPaymentRequest` |
-| Command class | `VerbNounCommand` | `RecordPaymentCommand` |
-| Query class | `GetNounQuery` | `GetStudentsQuery` |
-| Controller | `NounController` | `StudentsController` |
-| Endpoint route | `kebab-case`, pluralised nouns | `/api/organizations/{orgId}/students` |
-| Exception classes | Domain exception name | `StudentNotFoundException`, `ForbiddenException` |
-| Migration file | `YYYYMMDDHHMMSS_ShortDescription` | `20250301120000_AddStudentPhone` |
-| Interface prefix | `I` | `ICurrentUserService` |
-| Money fields in C# | `long` only; whole integers; never `decimal` | `amount`, `fee`, `manualFee` |
+| Artifact           | Convention                                   | Example                                          |
+| ------------------ | -------------------------------------------- | ------------------------------------------------ |
+| Entity class       | `PascalCase`, singular                       | `Student`, `FeePeriod`                           |
+| EF table mapping   | `snake_case` via `ToTable()`                 | `.ToTable("fee_periods")`                        |
+| DTO suffix         | `Dto` or `Request`                           | `FeePeriodDto`, `RecordPaymentRequest`           |
+| Command class      | `VerbNounCommand`                            | `RecordPaymentCommand`                           |
+| Query class        | `GetNounQuery`                               | `GetStudentsQuery`                               |
+| Controller         | `NounController`                             | `StudentsController`                             |
+| Endpoint route     | `kebab-case`, pluralised nouns               | `/api/organizations/{orgId}/students`            |
+| Exception classes  | Domain exception name                        | `StudentNotFoundException`, `ForbiddenException` |
+| Migration file     | `YYYYMMDDHHMMSS_ShortDescription`            | `20250301120000_AddStudentPhone`                 |
+| Interface prefix   | `I`                                          | `ICurrentUserService`                            |
+| Money fields in C# | `long` only; whole integers; never `decimal` | `amount`, `fee`, `manualFee`                     |
 
 ### 7.2 Frontend
 
-| Artifact | Convention | Example |
-|----------|-----------|---------|
-| Screen file | `PascalCase.tsx`, noun or verb-noun | `StudentList.tsx` |
-| Hook file | `camelCase.ts`, prefixed `use` | `useStudents.ts` |
-| Service/client file | `camelCase + ApiClient` | `billingApiClient.ts` |
-| Component file | `PascalCase.tsx` | `FeePeriodCard.tsx` |
-| Store file | `camelCase + Store` | `authStore.ts` |
-| Zustand store exports | `use + Name + Store` | `useAuthStore`, `useOrgStore` |
-| Env variable (client) | `EXPO_PUBLIC_` prefix, SCREAMING_SNAKE | `EXPO_PUBLIC_API_BASE_URL` |
-| Currency display | always via `formatCurrency(amount, currency)` — never inline formatting | |
+| Artifact              | Convention                                                              | Example                       |
+| --------------------- | ----------------------------------------------------------------------- | ----------------------------- |
+| Screen file           | `PascalCase.tsx`, noun or verb-noun                                     | `StudentList.tsx`             |
+| Hook file             | `camelCase.ts`, prefixed `use`                                          | `useStudents.ts`              |
+| Service/client file   | `camelCase + ApiClient`                                                 | `billingApiClient.ts`         |
+| Component file        | `PascalCase.tsx`                                                        | `FeePeriodCard.tsx`           |
+| Store file            | `camelCase + Store`                                                     | `authStore.ts`                |
+| Zustand store exports | `use + Name + Store`                                                    | `useAuthStore`, `useOrgStore` |
+| Env variable (client) | `EXPO_PUBLIC_` prefix, SCREAMING_SNAKE                                  | `EXPO_PUBLIC_API_BASE_URL`    |
+| Currency display      | always via `formatCurrency(amount, currency)` — never inline formatting |                               |
 
 ### 7.3 API Endpoint Conventions
 
@@ -810,6 +823,7 @@ Action on noun:  PATCH  /api/organizations/{orgId}/periods/{periodId}/waive
 
 All responses return **camelCase JSON** (C# `JsonNamingPolicy.CamelCase`).
 All errors return standard RFC 7807 ProblemDetails:
+
 ```json
 { "type": "string", "title": "string", "status": 400, "errors": {} }
 ```
@@ -839,6 +853,7 @@ EXPO_PUBLIC_API_BASE_URL=https://api.tuitioniq.com
 ```
 
 **Must never appear in `frontend/.env`:**
+
 ```bash
 SUPABASE_JWT_SECRET=       ← backend only; if bundled into app binary, rotate immediately
 SUPABASE_SERVICE_ROLE_KEY= ← backend only; bypasses RLS entirely
@@ -866,6 +881,7 @@ App__Environment=Production
 ```
 
 Local dev setup:
+
 ```bash
 cd backend
 dotnet user-secrets set "Supabase__JwtSecret" "<value>"
@@ -903,6 +919,7 @@ Follow this sequence in order. Do not skip steps.
 **Step 1 — Domain:** Add `Class.cs` entity + `ClassStatus.cs` enum in `TuitionIQ.Domain/`.
 
 **Step 2 — Infrastructure:** Add `ClassConfiguration.cs` in `Persistence/Configurations/`. Generate migration:
+
 ```bash
 ./scripts/db-migrate.sh add AddClassesTable
 ```
@@ -912,11 +929,13 @@ Follow this sequence in order. Do not skip steps.
 **Step 4 — API:** Add `ClassesController.cs` to `TuitionIQ.Api/Features/Classes/`. Map endpoints. Add `[ProducesResponseType]` attributes.
 
 **Step 5 — Shared types:** Pull new DTO schemas into the shared types layer:
+
 ```bash
 ./scripts/codegen-types.sh
 ```
 
 **Step 6 — Frontend feature:** Create `src/features/classes/` in the frontend. Add:
+
 - `components/` — UI for class list, class form, enrolment
 - `hooks/` — `useClasses.ts`, `useClass.ts`
 - `services/classesApiClient.ts` — typed with generated types from `@tuitioniq/types`
@@ -969,13 +988,14 @@ The feature-based folder structure scales linearly. Adding a `Lessons` feature c
 ### 10.3 LMS Expansion
 
 The schema supports LMS expansion without breaking changes (`lessons`, `classes`, `attendance` stubbed in `database_schema.md §6`). Architecturally:
+
 - New LMS features map to new `Application/Features/` folders and new Expo Router routes
 - Shared types codegen handles new DTO schemas automatically
 - RLS policies and composite FK patterns from billing are templates for LMS table isolation
 
 ### 10.4 Performance Under Load
 
-- **Read traffic** is absorbed by Supabase PostgREST + RLS. The C# API is not in the read path for list views.
+- **Read traffic** is served by C# API endpoints with efficient query projection, filtering, and pagination.
 - **JWT verification** is stateless (HMAC) — the C# API scales horizontally with no shared session state.
 - **TanStack Query caching** reduces redundant API calls. Lists are loaded once per session and invalidated only on mutation.
 - **RLS helper function** `get_user_org_ids()` is marked `STABLE` — result cached per transaction, preventing per-row subquery re-evaluation at scale.
@@ -992,6 +1012,6 @@ This structure is purpose-built for AI agent consumption:
 
 ---
 
-*End of TuitionIQ Project Structure — v1.0*
-*Aligned with: `authentication.md` v1.2 · `database_schema.md` v1.5.0*
-*Stack: React Expo (Web + Mobile) · C# ASP.NET Core · Supabase Auth (PostgreSQL)*
+_End of TuitionIQ Project Structure — v1.1.0_
+_Aligned with: `authentication.md` v1.3.0 · `database_schema.md` v1.5.1_
+_Stack: React Expo (Web + Mobile) · C# ASP.NET Core · Supabase Auth (PostgreSQL)_

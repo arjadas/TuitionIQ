@@ -1541,4 +1541,4 @@ since EF Core's `HasForeignKey` fluent API targets navigation properties, not ra
 
 ---
 
-_End of TuitionIQ Database Schema — v1.5.0_
+_End of TuitionIQ Database Schema — v1.5.1_

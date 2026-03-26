@@ -1,6 +1,6 @@
 # TuitionIQ — Production-Grade Authentication System
 
-### Using Supabase Authentication · v1.2.1
+### Using Supabase Authentication · v1.3.0
 
 > **Audience:** AI agents, backend engineers, and frontend developers implementing the auth system.
 > **Schema version this aligns to:** `database_schema.md` v1.5.1
@@ -77,13 +77,13 @@ The user column mapping with Supabase Auth is:
 
 Data flow summary:
   Auth (magic link dispatch, session exchange) → Supabase Auth directly from client
-  Data reads (student lists, fee periods)      → Supabase PostgREST with RLS
+  Data reads (student lists, fee periods)      → C# ASP.NET Core API
   Business logic writes (payments, invites)    → C# ASP.NET Core API
   C# API verifies every JWT before processing via SUPABASE_JWT_SECRET
 ```
 
 **Why split C# API and Supabase PostgREST?**
-Direct PostgREST with RLS efficiently serves reads at scale. The C# API enforces multi-step business rules that cannot be safely expressed in RLS alone — for example, verifying a teacher owns a student before recording a payment. Financial write operations must never be exposed directly through PostgREST.
+Supabase Auth remains the authentication provider, while the C# API is the single data-access gateway for frontend reads and writes. This keeps validation, authorization, and business rules centralized. Financial write operations and read endpoints both stay behind the API boundary.
 
 ---
 
@@ -312,7 +312,7 @@ STEP 2 — CLIENT CLEANUP
 
 STEP 3 — BACKEND (automatic)
   C# API: next request with invalidated token returns 401.
-  PostgREST: RLS blocks all data access.
+  Any protected API endpoint returns 401/403 based on token validity and user access.
 
 "SIGN OUT EVERYWHERE" (all devices):
   Call: await supabase.auth.signOut({ scope: 'global' })
@@ -331,16 +331,10 @@ Every successful authentication navigates to `/home` without exception. The home
 ```
 ON /home MOUNT:
 
-Query (Supabase PostgREST, RLS-protected):
-  SELECT
-    om.organization_id,
-    om.role,
-    o.name,
-    o.slug
-  FROM organization_members om
-  JOIN organizations o ON o.id = om.organization_id
-  WHERE om.user_id = auth.uid()
-    AND o.deleted_at IS NULL
+Query (C# ASP.NET Core API via apiClient):
+  GET /api/users/me
+  // Response includes memberships[] with:
+  // organizationId, role, name, slug
 
 RESULT: memberships[]
 
@@ -414,7 +408,7 @@ Supabase Auth does not check your `public.users` table. The JWT remains technica
 
 Three mitigation layers, all required:
 
-1. **RLS** checks `public.users.is_active = TRUE` — blocks all data reads via PostgREST.
+1. **RLS** checks `public.users.is_active = TRUE` — acts as database-level safety control.
 2. **C# API middleware** checks `public.users.is_active` on every request — returns 403 if false.
 3. **Supabase Admin API** — call `admin.auth.signOut(userId, 'global')` + set `ban_duration` to block future magic link issuance.
 
@@ -431,7 +425,7 @@ Three mitigation layers, all required:
 | **Where used**         | Every API request: `Authorization: Bearer <token>` | Only sent to Supabase `/auth/v1/token` to obtain a new access token |
 | **Stored client-side** | Yes (SecureStore)                                  | Yes (SecureStore)                                                   |
 | **Revocable**          | No — valid until expiry (stateless JWT)            | Yes — rotation + server-side invalidation                           |
-| **Verified by**        | C# API (JWT secret, no DB call) + PostgREST/RLS    | Supabase Auth only                                                  |
+| **Verified by**        | C# API (JWT secret, no DB call)                    | Supabase Auth only                                                  |
 
 ### 2.2 Recommended Expiry Durations
 
@@ -722,10 +716,10 @@ On every C# API request:
   3. User identity resolved from 'sub' claim.
   4. Business logic proceeds.
 
-On every Supabase PostgREST request:
-  1. PostgREST verifies JWT signature (same mechanism).
-  2. auth.uid() set for RLS policy evaluation.
-  3. RLS filters rows automatically per policy.
+On every frontend data request to the C# API:
+  1. ASP.NET Core verifies JWT signature using SUPABASE_JWT_SECRET.
+  2. User identity is resolved from JWT claims.
+  3. API authorization + database checks enforce org-scoped access.
 
 On token refresh (handled automatically by SDK):
   1. SDK detects access_token expiring within 60 seconds.
@@ -989,7 +983,7 @@ Layer 4 — Minimise third-party scripts.
 
 ### 5.4 CSRF Considerations
 
-CSRF is not a meaningful threat to this architecture. Both the C# API and Supabase PostgREST use `Authorization: Bearer` header authentication. Browsers cannot set custom headers on cross-origin requests. An attacker cannot forge a cross-origin request that carries a valid Bearer token — the browser will not attach it.
+CSRF is not a meaningful threat to this architecture. The C# API uses `Authorization: Bearer` header authentication. Browsers cannot set custom headers on cross-origin requests. An attacker cannot forge a cross-origin request that carries a valid Bearer token — the browser will not attach it.
 
 As defense-in-depth, validate the `Origin` header in the C# API for state-mutating requests:
 
@@ -1019,15 +1013,18 @@ app.Use(async (context, next) =>
 
 ### 5.5 Secure API Design for Financial Operations
 
-All financial write operations must route through the C# ASP.NET Core API. Direct PostgREST writes on financial tables are prohibited.
+All data read and write operations must route through the C# ASP.NET Core API. Direct PostgREST access from the frontend is prohibited.
 
 ```
-Allowed via Supabase PostgREST (RLS-protected reads only):
-  ✅ GET /rest/v1/students
-  ✅ GET /rest/v1/fee_periods
-  ✅ GET /rest/v1/organization_members
+Allowed via C# API (frontend data access):
+  ✅ GET /api/organizations/{orgId}/students
+  ✅ GET /api/organizations/{orgId}/periods
+  ✅ GET /api/users/me
 
-Prohibited via PostgREST — must use C# API:
+Prohibited via direct PostgREST access from frontend:
+  ❌ GET /rest/v1/students
+  ❌ GET /rest/v1/fee_periods
+  ❌ GET /rest/v1/organization_members
   ❌ POST fee_payments      →  POST /api/payments
   ❌ POST student_fees      →  POST /api/students/{id}/fees
   ❌ POST invites           →  POST /api/invites
@@ -1114,13 +1111,8 @@ Resolve all user context in a single query on the home screen after login. Cache
 ```typescript
 // hooks/useOrgMemberships.ts
 export const loadOrgMemberships = async () => {
-  const { data } = await supabase.from("organization_members").select(`
-      organization_id,
-      role,
-      joined_at,
-      organizations ( id, name, slug, plan )
-    `);
-  return data ?? [];
+  const { data } = await apiClient.get("/api/users/me");
+  return data.memberships ?? [];
 };
 
 // Invalidate and re-fetch only when:
@@ -1131,9 +1123,9 @@ export const loadOrgMemberships = async () => {
 
 ### 6.2 JWT Verification is Stateless — Use It
 
-Both the C# API and PostgREST verify JWTs by checking the signature with `SUPABASE_JWT_SECRET`. No database lookup. No network call. At 10,000 concurrent users, JWT verification adds microseconds per request.
+The C# API verifies JWTs by checking the signature with `SUPABASE_JWT_SECRET`. No database lookup. No network call. At 10,000 concurrent users, JWT verification adds microseconds per request.
 
-Design principle: push data reads to PostgREST (JWT-verified + RLS). Reserve the C# API for writes and multi-step business logic. The C# API is the bottleneck — minimise its call frequency by using PostgREST for safe reads.
+Design principle: route all frontend data reads and writes through the C# API. Keep read endpoints efficient with projection, filtering, pagination, and caching where appropriate.
 
 ### 6.3 RLS Policy Performance
 
@@ -1182,11 +1174,7 @@ Magic link onboarding only collects an email address. After first authentication
 
 ```typescript
 // On /home, after org membership query:
-const { data: profile } = await supabase
-  .from("users")
-  .select("first_name, last_name")
-  .eq("id", session.user.id)
-  .single();
+const { data: profile } = await apiClient.get("/api/users/me");
 
 if (!profile?.first_name || !profile?.last_name) {
   setShowProfileCompletion(true);
@@ -1304,7 +1292,7 @@ Case B: Refresh token expired after 7 days of inactivity
 
 Case C: Account deactivated mid-session
   Next C# API write returns 403.
-  Next PostgREST read blocked by RLS.
+  Next C# API read returns 403.
   Show: "Your account access has been suspended.
          Please contact your organisation administrator."
   Do not show a raw HTTP status code.
@@ -1440,7 +1428,7 @@ For TuitionIQ, this means a removed teacher could attempt financial operations f
 
 **Three-layer response — all required:**
 
-1. RLS checks `public.users.is_active = TRUE` → PostgREST reads blocked.
+1. RLS checks `public.users.is_active = TRUE` → database-level safety remains enforced.
 2. C# middleware checks `public.users.is_active` → API writes blocked.
 3. `supabaseAdmin.Auth.UpdateUserById(userId, { ban_duration: "87600h" })` → magic link blocked at the auth layer.
 
@@ -1469,7 +1457,7 @@ For TuitionIQ, this means a removed teacher could attempt financial operations f
 
 **What to do:**
 
-1. Always pass `organization_id` explicitly in every C# API call and PostgREST query. Never infer it.
+1. Always pass `organization_id` explicitly in every C# API call. Never infer it.
 2. The org selector on `/home` (Section 1.6) applies to all user types, not just teachers.
 3. On org switch: clear all cached org-scoped state before re-fetching.
 4. The C# API validates org membership server-side on every write, regardless of what the client passes.
@@ -1641,6 +1629,6 @@ For TuitionIQ, this means a removed teacher could attempt financial operations f
 
 ---
 
-_End of TuitionIQ Authentication System — v1.2.1_
+_End of TuitionIQ Authentication System — v1.3.0_
 _Aligns with `database_schema.md` v1.5.1_
 _Stack: React Expo (Web + Mobile) · C# ASP.NET Core · Supabase Auth_
