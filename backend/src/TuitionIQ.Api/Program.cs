@@ -15,7 +15,7 @@ var applicationAssemblies = AppDomain.CurrentDomain
 
 if (applicationAssemblies.Length == 0)
 {
-    applicationAssemblies = new[] { typeof(TuitionIQ.Application.AssemblyReference).Assembly };
+  applicationAssemblies = new[] { typeof(TuitionIQ.Application.AssemblyReference).Assembly };
 }
 
 builder.Services.AddControllers();
@@ -25,21 +25,21 @@ builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
-        options.Authority = builder.Configuration["Jwt:Authority"];
-        options.Audience = builder.Configuration["Jwt:Audience"];
+      options.Authority = builder.Configuration["Jwt:Authority"];
+      options.Audience = builder.Configuration["Jwt:Audience"];
 
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = true,
-            ValidIssuer = builder.Configuration["Jwt:Issuer"],
-            ValidateAudience = true,
-            ValidAudience = builder.Configuration["Jwt:Audience"],
-            ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Secret"] ?? "YOUR_JWT_SECRET_HERE")),
-            ValidateLifetime = true,
-            ClockSkew = TimeSpan.FromSeconds(30)
-        };
+      options.TokenValidationParameters = new TokenValidationParameters
+      {
+        ValidateIssuer = true,
+        ValidIssuer = builder.Configuration["Jwt:Issuer"],
+        ValidateAudience = true,
+        ValidAudience = builder.Configuration["Jwt:Audience"],
+        ValidateIssuerSigningKey = true,
+        IssuerSigningKey = new SymmetricSecurityKey(
+              Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Secret"] ?? "YOUR_JWT_SECRET_HERE")),
+        ValidateLifetime = true,
+        ClockSkew = TimeSpan.FromSeconds(30)
+      };
     });
 
 builder.Services.AddAuthorization();
@@ -49,23 +49,23 @@ builder.Services.AddValidatorsFromAssemblies(applicationAssemblies);
 
 builder.Services.AddSwaggerGen(options =>
 {
-    options.SwaggerDoc("v1", new OpenApiInfo
-    {
-        Title = "TuitionIQ API",
-        Version = "v1"
-    });
+  options.SwaggerDoc("v1", new OpenApiInfo
+  {
+    Title = "TuitionIQ API",
+    Version = "v1"
+  });
 
-    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
-    {
-        Name = "Authorization",
-        Type = SecuritySchemeType.Http,
-        Scheme = "bearer",
-        BearerFormat = "JWT",
-        In = ParameterLocation.Header,
-        Description = "Enter JWT token in the format: Bearer {token}"
-    });
+  options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+  {
+    Name = "Authorization",
+    Type = SecuritySchemeType.Http,
+    Scheme = "bearer",
+    BearerFormat = "JWT",
+    In = ParameterLocation.Header,
+    Description = "Enter JWT token in the format: Bearer {token}"
+  });
 
-    options.AddSecurityRequirement(new OpenApiSecurityRequirement
+  options.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
             new OpenApiSecurityScheme
@@ -85,8 +85,8 @@ var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
+  app.UseSwagger();
+  app.UseSwaggerUI();
 }
 
 app.UseHttpsRedirection();
