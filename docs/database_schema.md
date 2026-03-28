@@ -6,7 +6,7 @@
 > **ORM Target:** Entity Framework Core (C# / ASP.NET Core)
 > **Auth Provider:** Supabase Auth (passwordless magic link only — no passwords anywhere in the system)
 > **Convention:** snake_case table and column names, UUID primary keys, soft deletes where appropriate.
-> **Version:** 1.5.1 — Replaces `auth_provider_id` with `auth_user_id` for clarity. v1.5.0 — Removes `auth_provider` and `display_name` from `users`; adds `phone` to `users` and `students`; removes `date_of_birth`, `grade_level`, and `created_by` from `students`; renames all money fields to drop the `_cents` suffix; standardises default currency to `BDT`; clarifies money is stored as whole integer units (no fractional subunits); fully aligns registration model and all references with Supabase passwordless auth.
+> **Version:** v1.5.1
 
 ---
 

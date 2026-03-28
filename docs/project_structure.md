@@ -4,7 +4,7 @@
 
 **Stack:** React Expo (Web + Mobile) · C# ASP.NET Core · Supabase (PostgreSQL + Auth)
 **Pattern:** Feature-based Clean Architecture (backend) · Feature-based modular screens (frontend)
-**Version:** aligned with `authentication.md` v1.3.0 · `database_schema.md` v1.5.1
+**Version:** v1.1.1
 
 ---
 
@@ -66,13 +66,13 @@ tuitioniq/                                    ← repository root
 
 **Separation of concerns:**
 
-| Folder      | Owner                        | Purpose                                                         |
-| ----------- | ---------------------------- | --------------------------------------------------------------- |
-| `backend/`  | C# team / backend agents     | All business logic, financial writes, auth validation           |
-| `frontend/` | Expo team / frontend agents  | UI, UX, client-side state, Supabase reads                       |
-| `shared/`   | Generated — do not hand-edit | TypeScript types consumed by frontend, sourced from backend     |
-| `docs/`     | All contributors             | Source of truth documents; agents must read before implementing |
-| `scripts/`  | DevOps / all contributors    | Reproducible local and CI tooling                               |
+| Folder      | Owner                        | Purpose                                                                          |
+| ----------- | ---------------------------- | -------------------------------------------------------------------------------- |
+| `backend/`  | C# team / backend agents     | All business logic, financial writes, auth validation                            |
+| `frontend/` | Expo team / frontend agents  | UI, UX, client-side state, backend API consumption, Supabase authentication only |
+| `shared/`   | Generated — do not hand-edit | TypeScript types consumed by frontend, sourced from backend                      |
+| `docs/`     | All contributors             | Source of truth documents; agents must read before implementing                  |
+| `scripts/`  | DevOps / all contributors    | Reproducible local and CI tooling                                                |
 
 ---
 
@@ -832,7 +832,7 @@ All errors return standard RFC 7807 ProblemDetails:
 
 - **No business logic in controllers.** Controllers dispatch MediatR commands and return results.
 - **No direct DB access in Application layer.** Only Infrastructure touches EF Core.
-- **No Supabase client in frontend feature services for writes.** Feature services use `apiClient` (backend) or `supabase` singleton for auth and RLS reads only.
+- **No Supabase client in frontend feature services for data access.** All reads and writes use `apiClient` (backend). `supabase` is used only for authentication.
 - **No hand-editing `shared/generated/`.** Fully generated; overwritten on each codegen run.
 - **No `any` type in TypeScript.** ESLint `@typescript-eslint/no-explicit-any` set to `error`.
 
@@ -1012,6 +1012,5 @@ This structure is purpose-built for AI agent consumption:
 
 ---
 
-_End of TuitionIQ Project Structure — v1.1.0_
-_Aligned with: `authentication.md` v1.3.0 · `database_schema.md` v1.5.1_
+_End of TuitionIQ Project Structure — v1.1.1_
 _Stack: React Expo (Web + Mobile) · C# ASP.NET Core · Supabase Auth (PostgreSQL)_

@@ -3,7 +3,6 @@
 ### Using Supabase Authentication · v1.3.0
 
 > **Audience:** AI agents, backend engineers, and frontend developers implementing the auth system.
-> **Schema version this aligns to:** `database_schema.md` v1.5.1
 > **Auth provider:** Supabase Auth
 > **Frontend:** React Expo (Web + Mobile — unified codebase)
 > **Backend:** C# ASP.NET Core API
@@ -1630,5 +1629,4 @@ For TuitionIQ, this means a removed teacher could attempt financial operations f
 ---
 
 _End of TuitionIQ Authentication System — v1.3.0_
-_Aligns with `database_schema.md` v1.5.1_
 _Stack: React Expo (Web + Mobile) · C# ASP.NET Core · Supabase Auth_
