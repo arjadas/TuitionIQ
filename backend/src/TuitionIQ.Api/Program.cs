@@ -1,9 +1,12 @@
-using System.Text;
 using FluentValidation;
 using MediatR;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.IdentityModel.Tokens;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
+using TuitionIQ.Api.Extensions;
+using TuitionIQ.Api.Middleware;
+using TuitionIQ.Application.Common.Interfaces;
+using TuitionIQ.Infrastructure.Auth;
+using TuitionIQ.Infrastructure.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -21,28 +24,19 @@ if (applicationAssemblies.Length == 0)
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 
-builder.Services
-    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
-    {
-      options.Authority = builder.Configuration["Jwt:Authority"];
-      options.Audience = builder.Configuration["Jwt:Audience"];
+builder.Services.AddDbContext<AppDbContext>(options =>
+{
+  var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+    ?? throw new InvalidOperationException("ConnectionStrings:DefaultConnection is not configured.");
 
-      options.TokenValidationParameters = new TokenValidationParameters
-      {
-        ValidateIssuer = true,
-        ValidIssuer = builder.Configuration["Jwt:Issuer"],
-        ValidateAudience = true,
-        ValidAudience = builder.Configuration["Jwt:Audience"],
-        ValidateIssuerSigningKey = true,
-        IssuerSigningKey = new SymmetricSecurityKey(
-              Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Secret"] ?? throw new InvalidOperationException("JWT Secret not configured"))),
-        ValidateLifetime = true,
-        ClockSkew = TimeSpan.FromSeconds(30)
-      };
-    });
+  options.UseNpgsql(connectionString);
+});
+
+builder.Services.AddSupabaseJwtAuthentication(builder.Configuration);
 
 builder.Services.AddAuthorization();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 
 builder.Services.AddMediatR(applicationAssemblies);
 builder.Services.AddValidatorsFromAssemblies(applicationAssemblies);
@@ -93,6 +87,8 @@ app.UseHttpsRedirection();
 
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseMiddleware<UserActiveCheckMiddleware>();
+app.UseMiddleware<OriginValidationMiddleware>();
 
 app.MapControllers();
 
