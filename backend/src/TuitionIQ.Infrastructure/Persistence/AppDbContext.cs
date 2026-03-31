@@ -34,6 +34,12 @@ public class AppDbContext : DbContext
     base.OnModelCreating(modelBuilder);
   }
 
+  public override int SaveChanges()
+  {
+    EnsureAuditLogIsInsertOnly();
+    return base.SaveChanges();
+  }
+
   public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
   {
     EnsureAuditLogIsInsertOnly();

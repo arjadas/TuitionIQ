@@ -36,7 +36,7 @@ builder.Services
         ValidAudience = builder.Configuration["Jwt:Audience"],
         ValidateIssuerSigningKey = true,
         IssuerSigningKey = new SymmetricSecurityKey(
-              Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Secret"] ?? "YOUR_JWT_SECRET_HERE")),
+              Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Secret"] ?? throw new InvalidOperationException("JWT Secret not configured"))),
         ValidateLifetime = true,
         ClockSkew = TimeSpan.FromSeconds(30)
       };
