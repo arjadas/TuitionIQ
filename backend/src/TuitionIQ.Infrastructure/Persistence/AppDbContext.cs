@@ -1,9 +1,10 @@
 using Microsoft.EntityFrameworkCore;
+using TuitionIQ.Application.Common.Interfaces;
 using TuitionIQ.Domain.Entities;
 
 namespace TuitionIQ.Infrastructure.Persistence;
 
-public class AppDbContext : DbContext
+public class AppDbContext : DbContext, IAppDbContext
 {
   public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
   {
@@ -18,6 +19,8 @@ public class AppDbContext : DbContext
   public DbSet<FeePeriod> FeePeriods => Set<FeePeriod>();
   public DbSet<FeePayment> FeePayments => Set<FeePayment>();
   public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+
+  IQueryable<User> IAppDbContext.Users => Users;
 
   protected override void OnModelCreating(ModelBuilder modelBuilder)
   {
@@ -44,6 +47,16 @@ public class AppDbContext : DbContext
   {
     EnsureAuditLogIsInsertOnly();
     return base.SaveChangesAsync(cancellationToken);
+  }
+
+  public void AddAuditLog(AuditLog auditLog)
+  {
+    AuditLogs.Add(auditLog);
+  }
+
+  public Task<T?> FirstOrDefaultAsync<T>(IQueryable<T> query, CancellationToken cancellationToken = default)
+  {
+    return EntityFrameworkQueryableExtensions.FirstOrDefaultAsync(query, cancellationToken);
   }
 
   private void EnsureAuditLogIsInsertOnly()
