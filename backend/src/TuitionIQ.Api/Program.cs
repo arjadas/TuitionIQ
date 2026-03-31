@@ -1,7 +1,7 @@
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.OpenApi.Models;
+using Microsoft.OpenApi;
 using TuitionIQ.Api.Extensions;
 using TuitionIQ.Api.Middleware;
 using TuitionIQ.Application.Common.Interfaces;
@@ -39,7 +39,7 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IAppDbContext>(serviceProvider => serviceProvider.GetRequiredService<AppDbContext>());
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 
-builder.Services.AddMediatR(applicationAssemblies);
+builder.Services.AddMediatR(configuration => configuration.RegisterServicesFromAssemblies(applicationAssemblies));
 builder.Services.AddValidatorsFromAssemblies(applicationAssemblies);
 
 builder.Services.AddSwaggerGen(options =>

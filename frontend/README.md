@@ -30,13 +30,13 @@ You can start developing by editing the files inside the **app** directory. This
 1. Start backend API from the project root:
 
    ```bash
-   dotnet run --project ./backend/TuitionIQ.csproj --urls "http://0.0.0.0:5000"
+   dotnet run --project ./backend/src/TuitionIQ.Api/TuitionIQ.Api.csproj --urls "http://0.0.0.0:5000"
    ```
 
 2. Set API base URL in `.env` inside this folder:
 
    ```bash
-   EXPO_PUBLIC_API_URL=http://localhost:5000/api
+   EXPO_PUBLIC_API_BASE_URL=http://localhost:5000/api
    ```
 
 3. Platform notes:
