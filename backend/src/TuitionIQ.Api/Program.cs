@@ -50,7 +50,7 @@ builder.Services.AddSwaggerGen(options =>
     Version = "v1"
   });
 
-  options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+  var bearerSecurityScheme = new OpenApiSecurityScheme
   {
     Name = "Authorization",
     Type = SecuritySchemeType.Http,
@@ -58,22 +58,17 @@ builder.Services.AddSwaggerGen(options =>
     BearerFormat = "JWT",
     In = ParameterLocation.Header,
     Description = "Enter JWT token in the format: Bearer {token}"
-  });
+  };
 
-  options.AddSecurityRequirement(new OpenApiSecurityRequirement
+  options.AddSecurityDefinition("Bearer", bearerSecurityScheme);
+
+  options.AddSecurityRequirement(document => new OpenApiSecurityRequirement
+  {
     {
-        {
-            new OpenApiSecurityScheme
-            {
-                Reference = new OpenApiReference
-                {
-                    Type = ReferenceType.SecurityScheme,
-                    Id = "Bearer"
-                }
-            },
-            Array.Empty<string>()
-        }
-    });
+      new OpenApiSecuritySchemeReference("Bearer", document, null),
+      new List<string>()
+    }
+  });
 });
 
 var app = builder.Build();
