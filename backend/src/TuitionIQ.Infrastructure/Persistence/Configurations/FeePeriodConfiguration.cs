@@ -110,14 +110,11 @@ public class FeePeriodConfiguration : IEntityTypeConfiguration<FeePeriod>
     builder.HasIndex(e => new { e.StudentId, e.PeriodYear, e.PeriodMonth })
       .IsUnique()
       .HasFilter("\"deleted_at\" IS NULL")
-      .HasDatabaseName("idx_fee_periods_student_month");
+      .HasDatabaseName("idx_fee_periods_student_month_active");
 
     builder.HasIndex(e => new { e.OrganizationId, e.Status })
       .HasFilter("\"deleted_at\" IS NULL")
       .HasDatabaseName("idx_fee_periods_org_status");
-
-    builder.HasIndex(e => new { e.StudentId, e.PeriodYear, e.PeriodMonth })
-      .HasDatabaseName("idx_fee_periods_student_id");
 
     builder.HasIndex(e => new { e.OrganizationId, e.PeriodYear, e.PeriodMonth })
       .HasFilter("\"deleted_at\" IS NULL")

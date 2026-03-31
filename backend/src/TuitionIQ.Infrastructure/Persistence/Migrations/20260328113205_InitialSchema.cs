@@ -16,6 +16,9 @@ namespace TuitionIQ.Infrastructure.Persistence.Migrations
             migrationBuilder.EnsureSchema(
                 name: "public");
 
+            // Ensure pgcrypto is available FIRST
+            migrationBuilder.Sql(@"CREATE EXTENSION IF NOT EXISTS pgcrypto;");
+
             migrationBuilder.CreateTable(
                 name: "users",
                 schema: "public",
@@ -393,7 +396,7 @@ namespace TuitionIQ.Infrastructure.Persistence.Migrations
                 schema: "public",
                 table: "fee_periods",
                 column: "due_date",
-                filter: "\"status\" IN ('unpaid', 'partial', 'overdue') AND \"deleted_at\" IS NULL");
+                filter: "\"status\" IN ('Unpaid', 'Partial', 'Overdue') AND \"deleted_at\" IS NULL");
 
             migrationBuilder.CreateIndex(
                 name: "idx_fee_periods_org_status",
@@ -747,9 +750,9 @@ BEGIN
      GROUP BY p.fee;
 
     v_status := CASE
-        WHEN v_total = 0 THEN 'unpaid'
-        WHEN v_total >= v_fee THEN 'paid'
-        ELSE 'partial'
+        WHEN v_total = 0 THEN 'Unpaid'
+        WHEN v_total >= v_fee THEN 'Paid'
+        ELSE 'Partial'
     END;
 
     UPDATE public.fee_periods
@@ -757,7 +760,7 @@ BEGIN
                  status = v_status,
                  updated_at = NOW()
      WHERE id = v_period_id
-         AND status NOT IN ('waived', 'overdue');
+         AND status NOT IN ('Waived', 'Overdue');
 
     RETURN NEW;
 END;
@@ -855,7 +858,7 @@ CREATE POLICY student_fees_staff_access ON public.student_fees
             SELECT organization_id
             FROM public.organization_members
             WHERE user_id = auth.uid()
-                AND role IN ('owner', 'admin', 'teacher')
+                AND role IN ('Owner', 'Admin', 'Teacher')
         )
         AND deleted_at IS NULL
     ) WITH CHECK (
@@ -863,7 +866,7 @@ CREATE POLICY student_fees_staff_access ON public.student_fees
             SELECT organization_id
             FROM public.organization_members
             WHERE user_id = auth.uid()
-                AND role IN ('owner', 'admin', 'teacher')
+                AND role IN ('Owner', 'Admin', 'Teacher')
         )
     );
 
@@ -873,7 +876,7 @@ CREATE POLICY fee_payments_staff_access ON public.fee_payments
             SELECT organization_id
             FROM public.organization_members
             WHERE user_id = auth.uid()
-                AND role IN ('owner', 'admin', 'teacher')
+                AND role IN ('Owner', 'Admin', 'Teacher')
         )
         AND deleted_at IS NULL
     ) WITH CHECK (
@@ -881,7 +884,7 @@ CREATE POLICY fee_payments_staff_access ON public.fee_payments
             SELECT organization_id
             FROM public.organization_members
             WHERE user_id = auth.uid()
-                AND role IN ('owner', 'admin', 'teacher')
+                AND role IN ('Owner', 'Admin', 'Teacher')
         )
     );
 
@@ -901,7 +904,7 @@ CREATE POLICY fee_periods_staff_access ON public.fee_periods
             SELECT organization_id
             FROM public.organization_members
             WHERE user_id = auth.uid()
-                AND role IN ('owner', 'admin', 'teacher')
+                AND role IN ('Owner', 'Admin', 'Teacher')
         )
         AND deleted_at IS NULL
     ) WITH CHECK (
@@ -909,7 +912,7 @@ CREATE POLICY fee_periods_staff_access ON public.fee_periods
             SELECT organization_id
             FROM public.organization_members
             WHERE user_id = auth.uid()
-                AND role IN ('owner', 'admin', 'teacher')
+                AND role IN ('Owner', 'Admin', 'Teacher')
         )
     );
 
@@ -933,7 +936,7 @@ CREATE POLICY audit_logs_staff_read ON public.audit_logs
             SELECT organization_id
             FROM public.organization_members
             WHERE user_id = auth.uid()
-                AND role IN ('owner', 'admin', 'teacher')
+                AND role IN ('Owner', 'Admin', 'Teacher')
         )
     );
 
@@ -944,7 +947,7 @@ CREATE POLICY audit_logs_staff_insert ON public.audit_logs
             SELECT organization_id
             FROM public.organization_members
             WHERE user_id = auth.uid()
-                AND role IN ('owner', 'admin', 'teacher')
+                AND role IN ('Owner', 'Admin', 'Teacher')
         )
     );
 ");
