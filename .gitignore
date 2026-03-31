@@ -20,8 +20,8 @@ dist-ssr
 *.suo
 *.ntvs*
 *.njsproj
-*.sln
-*.slnx
+#*.sln
+#*.slnx
 *.sw?
 package-lock.json
 

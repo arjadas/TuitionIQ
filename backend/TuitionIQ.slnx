@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/TuitionIQ.Api/TuitionIQ.Api.csproj" />
+    <Project Path="src/TuitionIQ.Application/TuitionIQ.Application.csproj" />
+    <Project Path="src/TuitionIQ.Domain/TuitionIQ.Domain.csproj" />
+    <Project Path="src/TuitionIQ.Infrastructure/TuitionIQ.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/TuitionIQ.ArchitectureTests/TuitionIQ.ArchitectureTests.csproj" />
+    <Project Path="tests/TuitionIQ.IntegrationTests/TuitionIQ.IntegrationTests.csproj" />
+    <Project Path="tests/TuitionIQ.UnitTests/TuitionIQ.UnitTests.csproj" />
+  </Folder>
+</Solution>
