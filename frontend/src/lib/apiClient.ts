@@ -1,5 +1,6 @@
 import axios, { type AxiosError } from "axios";
 import { router } from "expo-router";
+import { queryClient } from "@/src/lib/queryClient";
 import { supabase } from "@/src/lib/supabase";
 import { useAuthStore } from "@/src/store/authStore";
 import { useOrgStore } from "@/src/store/orgStore";
@@ -35,6 +36,7 @@ apiClient.interceptors.response.use(
       await supabase.auth.signOut();
       useAuthStore.getState().clearAuth();
       useOrgStore.getState().clearOrg();
+      queryClient.clear();
       router.replace("/login");
     }
 
@@ -42,6 +44,7 @@ apiClient.interceptors.response.use(
       await supabase.auth.signOut();
       useAuthStore.getState().clearAuth();
       useOrgStore.getState().clearOrg();
+      queryClient.clear();
       router.replace("/login");
     }
 

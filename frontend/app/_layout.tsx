@@ -1,6 +1,9 @@
 import { supabase } from "@/src/lib/supabase";
+import { organizationsMembershipsQueryKey } from "@/src/features/organizations/hooks/useOrgMemberships";
+import { queryClient } from "@/src/lib/queryClient";
 import { useAuthStore } from "@/src/store/authStore";
 import { useOrgStore } from "@/src/store/orgStore";
+import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import * as SplashScreen from "expo-splash-screen";
 import { router, Stack } from "expo-router";
 import { AppState, type AppStateStatus } from "react-native";
@@ -8,7 +11,8 @@ import { useEffect } from "react";
 
 void SplashScreen.preventAutoHideAsync();
 
-export default function RootLayout() {
+function RootNavigator() {
+  const appQueryClient = useQueryClient();
   const isInitialised = useAuthStore((state) => state.isInitialised);
   const setSession = useAuthStore((state) => state.setSession);
   const setUser = useAuthStore((state) => state.setUser);
@@ -37,6 +41,7 @@ export default function RootLayout() {
         } else {
           clearAuth();
           clearOrg();
+          appQueryClient.clear();
           router.replace("/login");
         }
       } finally {
@@ -55,12 +60,16 @@ export default function RootLayout() {
         case "SIGNED_IN": {
           setSession(session);
           setUser(session?.user ?? null);
+          void appQueryClient.invalidateQueries({
+            queryKey: organizationsMembershipsQueryKey,
+          });
           router.replace("/home");
           break;
         }
         case "SIGNED_OUT": {
           clearAuth();
           clearOrg();
+          appQueryClient.clear();
           router.replace("/login");
           break;
         }
@@ -91,7 +100,7 @@ export default function RootLayout() {
       subscription.unsubscribe();
       appStateSubscription.remove();
     };
-  }, [clearAuth, clearOrg, setInitialised, setSession, setUser]);
+  }, [appQueryClient, clearAuth, clearOrg, setInitialised, setSession, setUser]);
 
   useEffect(() => {
     if (isInitialised) {
@@ -104,4 +113,12 @@ export default function RootLayout() {
   }
 
   return <Stack screenOptions={{ headerShown: false }} />;
+}
+
+export default function RootLayout() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <RootNavigator />
+    </QueryClientProvider>
+  );
 }

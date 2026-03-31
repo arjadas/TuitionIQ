@@ -1,16 +1,10 @@
 import { create } from "zustand";
-
-export type OrgMembership = {
-  organizationId: string;
-  role: string;
-  name?: string;
-  slug?: string;
-};
+import type { OrganizationMembershipDto } from "@tuitioniq/types";
 
 type OrgState = {
-  memberships: OrgMembership[];
+  memberships: OrganizationMembershipDto[];
   selectedOrgId: string | null;
-  setMemberships: (memberships: OrgMembership[]) => void;
+  setMemberships: (memberships: OrganizationMembershipDto[]) => void;
   selectOrg: (organizationId: string | null) => void;
   clearOrg: () => void;
 };
