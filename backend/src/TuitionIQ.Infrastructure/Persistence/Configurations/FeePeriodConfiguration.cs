@@ -121,7 +121,7 @@ public class FeePeriodConfiguration : IEntityTypeConfiguration<FeePeriod>
       .HasDatabaseName("idx_fee_periods_org_year_month");
 
     builder.HasIndex(e => e.DueDate)
-      .HasFilter("\"status\" IN ('unpaid', 'partial', 'overdue') AND \"deleted_at\" IS NULL")
+      .HasFilter("\"status\" IN ('Unpaid', 'Partial', 'Overdue') AND \"deleted_at\" IS NULL")
       .HasDatabaseName("idx_fee_periods_due_date");
   }
 }

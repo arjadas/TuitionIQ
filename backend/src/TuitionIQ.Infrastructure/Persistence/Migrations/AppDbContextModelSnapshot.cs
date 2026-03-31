@@ -275,7 +275,7 @@ namespace TuitionIQ.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("DueDate")
                         .HasDatabaseName("idx_fee_periods_due_date")
-                        .HasFilter("\"status\" IN ('unpaid', 'partial', 'overdue') AND \"deleted_at\" IS NULL");
+                        .HasFilter("\"status\" IN ('Unpaid', 'Partial', 'Overdue') AND \"deleted_at\" IS NULL");
 
                     b.HasIndex("StudentFeeId");
 
@@ -291,7 +291,7 @@ namespace TuitionIQ.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("StudentId", "PeriodYear", "PeriodMonth")
                         .IsUnique()
-                        .HasDatabaseName("idx_fee_periods_student_id")
+                        .HasDatabaseName("idx_fee_periods_student_month_active")
                         .HasFilter("\"deleted_at\" IS NULL");
 
                     b.ToTable("fee_periods", "public");
