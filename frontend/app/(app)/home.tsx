@@ -13,6 +13,7 @@ export default function HomeScreen() {
     errorMessage,
     onProfileCompleted,
     onSelectOrg,
+    onCreateOrganization,
   } = useHomeScreenState();
 
   return (
@@ -41,7 +42,7 @@ export default function HomeScreen() {
             <Text style={styles.welcomeBody}>
               Create your organisation to start managing students and fee periods.
             </Text>
-            <Pressable style={styles.primaryButton}>
+            <Pressable onPress={onCreateOrganization} style={styles.primaryButton}>
               <Text style={styles.primaryButtonText}>Create your organisation</Text>
             </Pressable>
           </View>

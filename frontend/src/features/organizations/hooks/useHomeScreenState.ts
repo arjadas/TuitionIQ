@@ -16,6 +16,7 @@ type HomeScreenState = {
   errorMessage: string | null;
   onProfileCompleted: (profile: UserProfileDto) => void;
   onSelectOrg: (membership: OrganizationMembershipDto) => void;
+  onCreateOrganization: () => void;
 };
 
 function getErrorMessage(error: unknown): string {
@@ -79,6 +80,10 @@ export function useHomeScreenState(): HomeScreenState {
     [router, selectOrg],
   );
 
+  const onCreateOrganization = useCallback(() => {
+    router.push("/organizations/create" as Href);
+  }, [router]);
+
   const isLoading =
     userQuery.isPending || (!isProfileIncomplete && membershipsQuery.isPending && !hasRedirectedToDashboard.current);
 
@@ -98,5 +103,6 @@ export function useHomeScreenState(): HomeScreenState {
     errorMessage,
     onProfileCompleted,
     onSelectOrg,
+    onCreateOrganization,
   };
 }
