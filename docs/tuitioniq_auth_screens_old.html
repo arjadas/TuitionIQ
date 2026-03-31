@@ -1,0 +1,483 @@
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --b:#1D4ED8;--t:#0D9488;--r:#DC2626;--w:#D97706;--g:#16A34A;
+  --bg:#F1F5F9;--surf:#FFFFFF;--t1:#0F172A;--t2:#64748B;--bdr:#E2E8F0;
+  --t-bg:#E6FFFA;--t-text:#0F6E56;
+  --r-bg:#FEE2E2;--r-text:#991B1B;
+  --w-bg:#FEF3C7;--w-text:#92400E;
+}
+body{font-family:-apple-system,'DM Sans',sans-serif;background:var(--color-background-tertiary,#f5f5f3);padding:16px 8px;display:flex;flex-direction:column;align-items:center;gap:20px}
+h3{font-size:12px;font-weight:500;color:var(--color-text-secondary);letter-spacing:.06em;text-transform:uppercase;text-align:center;margin-bottom:4px}
+
+.row{display:flex;gap:16px;flex-wrap:wrap;justify-content:center;align-items:flex-start;width:100%;max-width:1040px}
+.col{display:flex;flex-direction:column;align-items:center;gap:6px}
+.col-label{font-size:11px;color:var(--color-text-secondary);font-weight:500;text-align:center}
+
+/* Phone frame */
+.phone{width:270px;background:var(--surf);border-radius:32px;border:2.5px solid #CBD5E1;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.1);flex-shrink:0}
+.status{background:#f8fafc;padding:10px 18px 6px;display:flex;justify-content:space-between;align-items:center;font-size:11px;font-weight:600;color:var(--t1)}
+.screen{background:var(--bg);display:flex;flex-direction:column;min-height:520px}
+.screen-inner{padding:20px 18px;flex:1;display:flex;flex-direction:column;gap:20px}
+
+/* Logo */
+.logo-block{display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 0 4px}
+.logo-mark{width:42px;height:42px;background:var(--b);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:#fff}
+.logo-name{font-size:18px;font-weight:700;color:var(--t1)}
+.logo-tag{font-size:11px;color:var(--t2);text-align:center}
+
+/* Screen header with back */
+.screen-hdr{display:flex;align-items:center;gap:10px;margin-bottom:-8px}
+.back-btn{font-size:14px;color:var(--t);font-weight:600;cursor:pointer;display:flex;align-items:center;gap:3px}
+.screen-title{font-size:17px;font-weight:700;color:var(--t1)}
+.screen-sub{font-size:12px;color:var(--t2);line-height:1.5;margin-top:-12px}
+
+/* Form */
+.form{display:flex;flex-direction:column;gap:10px}
+.field{display:flex;flex-direction:column;gap:4px}
+.field-label{font-size:11px;font-weight:600;color:var(--t2);letter-spacing:.02em;text-transform:uppercase}
+.field-input{background:var(--surf);border:1.5px solid var(--bdr);border-radius:11px;padding:10px 12px;font-size:13px;color:var(--t1);display:flex;align-items:center;justify-content:space-between}
+.field-input.focused{border-color:var(--b)}
+.field-input.error{border-color:var(--r);background:#fff5f5}
+.field-input.filled{border-color:#C7D2FE;background:#f8f9ff}
+.eye{font-size:14px;color:var(--t2);cursor:pointer}
+.field-error{font-size:11px;color:var(--r);display:flex;align-items:center;gap:4px}
+.field-helper{font-size:11px;color:var(--t2)}
+
+/* Password strength */
+.strength-bar{display:flex;gap:3px;margin-top:2px}
+.strength-seg{height:4px;flex:1;border-radius:99px;background:var(--bdr)}
+.strength-seg.s1{background:var(--r)}
+.strength-seg.s2{background:var(--w)}
+.strength-seg.s3{background:var(--g)}
+.strength-seg.s4{background:#15803d}
+.strength-label{font-size:10px;color:var(--t2);text-align:right;margin-top:2px}
+
+/* Row of fields */
+.field-row{display:flex;gap:8px}
+.field-row .field{flex:1}
+
+/* Inline link row */
+.inline-link{display:flex;justify-content:flex-end;margin-top:-4px}
+.link{font-size:12px;color:var(--t);cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px}
+.link.center{text-align:center}
+
+/* Buttons */
+.btn-primary{background:var(--b);color:#fff;border:none;border-radius:12px;padding:13px;font-size:14px;font-weight:700;width:100%;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px}
+.btn-primary.teal{background:var(--t)}
+.btn-primary.loading{background:#93C5FD;cursor:not-allowed}
+.btn-primary.disabled{background:var(--bdr);color:var(--t2);cursor:not-allowed}
+.spinner{width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite;display:inline-block}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Divider */
+.divider{display:flex;align-items:center;gap:10px;margin:0 -2px}
+.divider hr{flex:1;border:none;border-top:1px solid var(--bdr)}
+.divider span{font-size:11px;color:var(--t2)}
+
+/* Footer link */
+.footer-link{font-size:12px;color:var(--t2);text-align:center;line-height:1.6}
+.footer-link .link{font-size:12px}
+
+/* Checkbox row */
+.check-row{display:flex;align-items:flex-start;gap:8px}
+.check-box{width:16px;height:16px;border:1.5px solid var(--b);border-radius:4px;flex-shrink:0;margin-top:1px;background:#EFF6FF;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--b)}
+.check-text{font-size:11px;color:var(--t2);line-height:1.5}
+.check-text .link{font-size:11px}
+
+/* Success card */
+.success-card{background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:14px;padding:18px;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center}
+.success-icon{width:44px;height:44px;background:#16a34a;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;color:#fff}
+.success-title{font-size:15px;font-weight:700;color:#14532d}
+.success-body{font-size:12px;color:#166534;line-height:1.5}
+.success-meta{font-size:11px;color:#16a34a;font-weight:600}
+
+/* Error card */
+.error-card{background:#fff5f5;border:1.5px solid #fecaca;border-radius:14px;padding:16px;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center}
+.error-icon{width:40px;height:40px;background:var(--r);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;color:#fff}
+.error-title{font-size:14px;font-weight:700;color:#7f1d1d}
+.error-body{font-size:11px;color:#991b1b;line-height:1.5}
+
+/* Toast */
+.toast{background:#1e293b;color:#f8fafc;font-size:11px;padding:8px 14px;border-radius:10px;display:flex;align-items:center;gap:8px;margin-top:-10px}
+.toast.danger{background:#7f1d1d}
+.toast span{font-size:13px}
+
+/* State tab row */
+.state-tabs{display:flex;gap:4px;flex-wrap:wrap;justify-content:center;margin-top:2px}
+.state-tab{padding:4px 10px;border-radius:99px;font-size:10px;font-weight:600;cursor:pointer;border:1px solid var(--bdr);background:var(--surf);color:var(--t2)}
+.state-tab.on{background:var(--b);color:#fff;border-color:var(--b)}
+</style>
+
+<div style="width:100%;max-width:1040px">
+<h3 style="margin-bottom:12px">TuitionIQ — Authentication Screens</h3>
+
+<div class="row">
+
+  <!-- LOGIN -->
+  <div class="col">
+    <div class="col-label">01 Login</div>
+    <div class="state-tabs" id="login-tabs">
+      <div class="state-tab on" onclick="showLoginState('default',this)">Default</div>
+      <div class="state-tab" onclick="showLoginState('loading',this)">Loading</div>
+      <div class="state-tab" onclick="showLoginState('error',this)">Error</div>
+    </div>
+    <div class="phone">
+      <div class="status"><span>9:41</span><span>●●●</span></div>
+      <div class="screen">
+        <div class="screen-inner">
+          <div class="logo-block">
+            <div class="logo-mark">T</div>
+            <div class="logo-name">TuitionIQ</div>
+            <div class="logo-tag">Manage your students with ease</div>
+          </div>
+
+          <div class="form">
+            <div class="field">
+              <div class="field-label">Email address</div>
+              <div class="field-input filled" id="login-email">alex@tutoring.com</div>
+            </div>
+            <div class="field">
+              <div class="field-label">Password</div>
+              <div class="field-input filled" id="login-pass" style="justify-content:space-between">
+                <span>••••••••••</span><span class="eye">👁</span>
+              </div>
+              <div id="login-pass-err" class="field-error" style="display:none">⚠ Email or password is incorrect. Try again.</div>
+            </div>
+            <div class="inline-link"><span class="link">Forgot password?</span></div>
+          </div>
+
+          <div id="login-btn-wrap" style="display:flex;flex-direction:column;gap:10px">
+            <button class="btn-primary" id="login-btn">Sign In</button>
+          </div>
+
+          <div id="login-toast" style="display:none" class="toast danger"><span>⚠</span>Email or password is incorrect.</div>
+
+          <div class="footer-link">Don't have an account? <span class="link">Sign up</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SIGNUP -->
+  <div class="col">
+    <div class="col-label">02 Sign Up</div>
+    <div class="state-tabs" id="signup-tabs">
+      <div class="state-tab on" onclick="showSignupState('default',this)">Default</div>
+      <div class="state-tab" onclick="showSignupState('strength',this)">Typing</div>
+      <div class="state-tab" onclick="showSignupState('error',this)">Error</div>
+    </div>
+    <div class="phone">
+      <div class="status"><span>9:41</span><span>●●●</span></div>
+      <div class="screen">
+        <div class="screen-inner" style="gap:14px">
+          <div class="screen-hdr">
+            <div class="back-btn">‹ Back</div>
+          </div>
+          <div class="screen-title">Create Account</div>
+
+          <div class="form">
+            <div class="field-row">
+              <div class="field">
+                <div class="field-label">First name</div>
+                <div class="field-input filled" id="su-fname">Alex</div>
+              </div>
+              <div class="field">
+                <div class="field-label">Last name</div>
+                <div class="field-input filled" id="su-lname">Jones</div>
+              </div>
+            </div>
+            <div class="field">
+              <div class="field-label">Email address</div>
+              <div class="field-input filled" id="su-email">alex@tutoring.com</div>
+              <div id="su-email-err" class="field-error" style="display:none">⚠ An account with this email already exists. <span class="link" style="color:var(--r)">Sign in?</span></div>
+            </div>
+            <div class="field">
+              <div class="field-label">Password</div>
+              <div class="field-input focused" id="su-pass" style="justify-content:space-between">
+                <span id="su-pass-val">Tr0ub4dor&3</span><span class="eye">👁</span>
+              </div>
+              <div class="strength-bar" id="su-strength">
+                <div class="strength-seg s1"></div>
+                <div class="strength-seg"></div>
+                <div class="strength-seg"></div>
+                <div class="strength-seg"></div>
+              </div>
+              <div class="strength-label" id="su-strength-label">Weak</div>
+            </div>
+            <div class="field">
+              <div class="field-label">Confirm password</div>
+              <div class="field-input" id="su-confirm" style="justify-content:space-between">
+                <span id="su-confirm-val" style="color:var(--t2)">Confirm password</span><span class="eye">👁</span>
+              </div>
+              <div id="su-confirm-err" class="field-error" style="display:none">⚠ Passwords do not match</div>
+            </div>
+            <div class="check-row">
+              <div class="check-box">✓</div>
+              <div class="check-text">I agree to the <span class="link">Terms of Service</span> and <span class="link">Privacy Policy</span></div>
+            </div>
+          </div>
+
+          <button class="btn-primary disabled" id="su-btn">Create Account</button>
+          <div class="footer-link">Already have an account? <span class="link">Sign in</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FORGOT PASSWORD -->
+  <div class="col">
+    <div class="col-label">03 Forgot Password</div>
+    <div class="state-tabs">
+      <div class="state-tab on" onclick="showFPState('default',this)">Default</div>
+      <div class="state-tab" onclick="showFPState('loading',this)">Sending</div>
+      <div class="state-tab" onclick="showFPState('success',this)">Success</div>
+    </div>
+    <div class="phone">
+      <div class="status"><span>9:41</span><span>●●●</span></div>
+      <div class="screen">
+        <div class="screen-inner">
+          <div class="screen-hdr">
+            <div class="back-btn">‹ Back</div>
+          </div>
+          <div class="screen-title">Forgot Password</div>
+          <div class="screen-sub">Enter the email address linked to your account and we'll send you a reset link.</div>
+
+          <div id="fp-form" style="display:flex;flex-direction:column;gap:10px">
+            <div class="field">
+              <div class="field-label">Email address</div>
+              <div class="field-input filled">alex@tutoring.com</div>
+            </div>
+            <button class="btn-primary" id="fp-btn">Send Reset Link</button>
+          </div>
+
+          <div id="fp-success" style="display:none" class="success-card">
+            <div class="success-icon">✓</div>
+            <div class="success-title">Check your inbox</div>
+            <div class="success-body">We've sent a reset link to<br><strong>alex@tutoring.com</strong></div>
+            <div class="success-meta" id="fp-resend">Resend in 60s</div>
+            <span class="link" style="font-size:12px">Back to Sign In</span>
+          </div>
+
+          <div class="footer-link" id="fp-footer">
+            <span class="link">Back to Sign In</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RESET PASSWORD -->
+  <div class="col">
+    <div class="col-label">04 Reset Password</div>
+    <div class="state-tabs">
+      <div class="state-tab on" onclick="showRPState('default',this)">Default</div>
+      <div class="state-tab" onclick="showRPState('expired',this)">Expired</div>
+      <div class="state-tab" onclick="showRPState('success',this)">Success</div>
+    </div>
+    <div class="phone">
+      <div class="status"><span>9:41</span><span>●●●</span></div>
+      <div class="screen">
+        <div class="screen-inner">
+
+          <div style="display:flex;flex-direction:column;align-items:center;gap:4px;margin-bottom:-4px">
+            <div class="logo-mark" style="width:34px;height:34px;font-size:16px;margin-bottom:4px">T</div>
+            <div class="screen-title" style="text-align:center">Reset Password</div>
+          </div>
+          <div class="screen-sub" style="text-align:center;margin-top:-12px">Choose a strong new password for your account.</div>
+
+          <div id="rp-form" style="display:flex;flex-direction:column;gap:10px">
+            <div class="field">
+              <div class="field-label">New password</div>
+              <div class="field-input focused" style="justify-content:space-between">
+                <span id="rp-pass-val">Sunsh1ne&Daydream!</span><span class="eye">👁</span>
+              </div>
+              <div class="strength-bar" id="rp-strength">
+                <div class="strength-seg s1"></div>
+                <div class="strength-seg s2"></div>
+                <div class="strength-seg s3"></div>
+                <div class="strength-seg s4"></div>
+              </div>
+              <div class="strength-label" id="rp-strength-label" style="color:var(--g)">Strong</div>
+            </div>
+            <div class="field">
+              <div class="field-label">Confirm new password</div>
+              <div class="field-input filled" style="justify-content:space-between">
+                <span>Sunsh1ne&Daydream!</span><span class="eye">👁</span>
+              </div>
+            </div>
+            <button class="btn-primary" id="rp-btn">Set New Password</button>
+          </div>
+
+          <div id="rp-expired" style="display:none" class="error-card">
+            <div class="error-icon">⏱</div>
+            <div class="error-title">Link expired</div>
+            <div class="error-body">This reset link has expired or has already been used. Request a new one.</div>
+            <button class="btn-primary" style="font-size:12px;padding:10px;margin-top:4px">Request new link</button>
+          </div>
+
+          <div id="rp-success" style="display:none" class="success-card">
+            <div class="success-icon">✓</div>
+            <div class="success-title">Password updated!</div>
+            <div class="success-body">Sign in with your new password.</div>
+            <div class="success-meta">Redirecting in 3s…</div>
+            <button class="btn-primary teal" style="font-size:12px;padding:10px;width:100%">Go to Sign In</button>
+          </div>
+
+          <div class="footer-link" id="rp-footer"><span class="link">Back to Sign In</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Nav flow diagram -->
+<div style="background:var(--color-background-secondary);border-radius:var(--border-radius-lg);padding:14px 20px;max-width:900px;width:100%;margin-top:4px">
+  <p style="font-size:12px;font-weight:500;color:var(--color-text-secondary);margin-bottom:10px">Navigation flow</p>
+  <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:11px;color:var(--color-text-secondary)">
+    <span style="background:var(--color-background-primary);border:1px solid var(--color-border-tertiary);border-radius:6px;padding:4px 10px;font-weight:500;color:var(--color-text-primary)">Login</span>
+    <span>→ sign up →</span>
+    <span style="background:var(--color-background-primary);border:1px solid var(--color-border-tertiary);border-radius:6px;padding:4px 10px;font-weight:500;color:var(--color-text-primary)">Sign Up</span>
+    <span style="margin:0 4px">·</span>
+    <span style="background:var(--color-background-primary);border:1px solid var(--color-border-tertiary);border-radius:6px;padding:4px 10px;font-weight:500;color:var(--color-text-primary)">Login</span>
+    <span>→ forgot →</span>
+    <span style="background:var(--color-background-primary);border:1px solid var(--color-border-tertiary);border-radius:6px;padding:4px 10px;font-weight:500;color:var(--color-text-primary)">Forgot Password</span>
+    <span>→ email link →</span>
+    <span style="background:var(--color-background-primary);border:1px solid var(--color-border-tertiary);border-radius:6px;padding:4px 10px;font-weight:500;color:var(--color-text-primary)">Reset Password</span>
+    <span>→ success →</span>
+    <span style="background:#1D4ED8;color:#fff;border-radius:6px;padding:4px 10px;font-weight:500">Dashboard</span>
+  </div>
+  <p style="font-size:11px;color:var(--color-text-secondary);margin-top:8px">Reset Password enters via deep link · replaces stack on success · cannot navigate back into reset form</p>
+</div>
+
+</div>
+
+<script>
+function setTabs(container, activeEl){
+  container.querySelectorAll('.state-tab').forEach(t=>t.classList.remove('on'));
+  activeEl.classList.add('on');
+}
+
+/* LOGIN STATES */
+function showLoginState(s, el){
+  setTabs(document.getElementById('login-tabs'), el);
+  const btn = document.getElementById('login-btn');
+  const emailField = document.getElementById('login-email');
+  const passField = document.getElementById('login-pass');
+  const passErr = document.getElementById('login-pass-err');
+  const toast = document.getElementById('login-toast');
+  passErr.style.display='none'; toast.style.display='none';
+  emailField.className='field-input filled';
+  passField.className='field-input filled';
+  btn.className='btn-primary'; btn.innerHTML='Sign In';
+  if(s==='loading'){
+    btn.className='btn-primary loading';
+    btn.innerHTML='<div class="spinner"></div> Signing in…';
+  } else if(s==='error'){
+    passField.className='field-input error';
+    passErr.style.display='flex';
+    btn.innerHTML='Sign In';
+  }
+}
+
+/* SIGNUP STATES */
+const suStrengths = {
+  default: {segs:[1,0,0,0], label:'Weak', color:'var(--r)'},
+  strength: {segs:[1,2,3,0], label:'Good', color:'var(--g)'},
+  error: {segs:[1,0,0,0], label:'Weak', color:'var(--r)'}
+};
+function showSignupState(s, el){
+  setTabs(document.getElementById('signup-tabs'), el);
+  const emailErr = document.getElementById('su-email-err');
+  const confirmErr = document.getElementById('su-confirm-err');
+  const btn = document.getElementById('su-btn');
+  const passField = document.getElementById('su-pass');
+  const confirmField = document.getElementById('su-confirm');
+  const emailField = document.getElementById('su-email');
+  emailErr.style.display='none'; confirmErr.style.display='none';
+  passField.className='field-input filled';
+  emailField.className='field-input filled';
+  confirmField.className='field-input';
+  document.getElementById('su-confirm-val').style.color='var(--t2)';
+  document.getElementById('su-confirm-val').textContent='Confirm password';
+  btn.className='btn-primary disabled';
+  const st = suStrengths[s];
+  const segs = document.querySelectorAll('#su-strength .strength-seg');
+  segs.forEach((seg,i)=>{
+    seg.className='strength-seg';
+    if(i < st.segs.filter(Boolean).length) seg.classList.add('s'+(i+1));
+  });
+  document.getElementById('su-strength-label').textContent = st.label;
+  document.getElementById('su-strength-label').style.color = st.color;
+  if(s==='strength'){
+    passField.className='field-input focused';
+    document.getElementById('su-pass-val').textContent='Sunsh1ne_Daydream';
+    btn.className='btn-primary disabled';
+  } else if(s==='error'){
+    emailField.className='field-input error';
+    emailErr.style.display='flex';
+    confirmField.className='field-input error';
+    confirmErr.style.display='flex';
+    document.getElementById('su-confirm-val').style.color='var(--t1)';
+    document.getElementById('su-confirm-val').textContent='DifferentPassword1';
+    document.getElementById('su-pass-val').textContent='Tr0ub4dor&3';
+  } else {
+    document.getElementById('su-pass-val').textContent='Tr0ub4dor&3';
+  }
+}
+
+/* FORGOT PASSWORD */
+let fpTimer = null;
+function showFPState(s, el){
+  const tabs = el.closest('.state-tabs');
+  setTabs(tabs, el);
+  const form = document.getElementById('fp-form');
+  const success = document.getElementById('fp-success');
+  const footer = document.getElementById('fp-footer');
+  const btn = document.getElementById('fp-btn');
+  form.style.display='flex'; success.style.display='none'; footer.style.display='block';
+  btn.className='btn-primary'; btn.innerHTML='Send Reset Link';
+  if(fpTimer){clearInterval(fpTimer); fpTimer=null;}
+  if(s==='loading'){
+    btn.className='btn-primary loading';
+    btn.innerHTML='<div class="spinner"></div> Sending…';
+  } else if(s==='success'){
+    form.style.display='none'; success.style.display='flex'; footer.style.display='none';
+    let secs=60;
+    const resend = document.getElementById('fp-resend');
+    resend.textContent='Resend in 60s';
+    fpTimer = setInterval(()=>{
+      secs--;
+      if(secs<=0){clearInterval(fpTimer); resend.textContent='Resend link'; resend.style.cursor='pointer'; return;}
+      resend.textContent='Resend in '+secs+'s';
+    },1000);
+  }
+}
+
+/* RESET PASSWORD */
+function showRPState(s, el){
+  const tabs = el.closest('.state-tabs');
+  setTabs(tabs, el);
+  const form = document.getElementById('rp-form');
+  const expired = document.getElementById('rp-expired');
+  const success = document.getElementById('rp-success');
+  const footer = document.getElementById('rp-footer');
+  form.style.display='none'; expired.style.display='none'; success.style.display='none';
+  footer.style.display='block';
+  if(s==='default'){
+    form.style.display='flex';
+  } else if(s==='expired'){
+    expired.style.display='flex'; footer.style.display='none';
+  } else if(s==='success'){
+    success.style.display='flex'; footer.style.display='none';
+    let t=3;
+    const meta = success.querySelector('.success-meta');
+    const iv = setInterval(()=>{
+      t--; if(t<=0){clearInterval(iv); meta.textContent='Redirecting…'; return;}
+      meta.textContent='Redirecting in '+t+'s…';
+    },1000);
+  }
+}
+</script>
