@@ -42,6 +42,16 @@ builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddMediatR(configuration => configuration.RegisterServicesFromAssemblies(applicationAssemblies));
 builder.Services.AddValidatorsFromAssemblies(applicationAssemblies);
 
+builder.Services.AddCors(options =>
+{
+  options.AddDefaultPolicy("ExpoWebPolicy", policy =>
+  {
+    policy.WithOrigins("http://localhost:8081", "https://tuitioniq.pages.dev")
+          .AllowAnyHeader()
+          .AllowAnyMethod();
+  });
+});
+
 builder.Services.AddSwaggerGen(options =>
 {
   options.SwaggerDoc("v1", new OpenApiInfo
@@ -84,13 +94,22 @@ if (app.Environment.IsDevelopment())
   app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
+app.UseHttpsRedirection();  // Redirect HTTP requests to HTTPS for secure communication
 
-app.UseAuthentication();
-app.UseAuthorization();
-app.UseMiddleware<UserActiveCheckMiddleware>();
-app.UseMiddleware<OriginValidationMiddleware>();
+app.UseRouting();  // Matches the incoming request to an endpoint (but doesn’t execute it yet)
 
-app.MapControllers();
+app.UseCors("ExpoWebPolicy");  // Adds CORS headers so browsers allow requests from approved frontend origins
 
-app.Run();
+app.UseMiddleware<UserActiveCheckMiddleware>();  
+// Custom check to ensure the user/account is still active before continuing
+
+app.UseMiddleware<OriginValidationMiddleware>();  
+// Optional security layer to validate request origin (extra protection beyond CORS, e.g. CSRF hardening)
+
+app.UseAuthentication();  // Identifies the user (e.g. validates JWT and sets HttpContext.User)
+
+app.UseAuthorization();  // Enforces access rules (e.g. [Authorize] attributes, roles, policies)
+
+app.MapControllers();  // Executes the matched controller action for the request
+
+app.Run();  // Starts the application and begins listening for incoming requests
