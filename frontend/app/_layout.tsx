@@ -83,22 +83,44 @@ function RootNavigator() {
       }
     });
 
-    const appStateSubscription = AppState.addEventListener(
-      "change",
-      (state: AppStateStatus) => {
-        if (state === "active") {
-          supabase.auth.startAutoRefresh();
-          return;
-        }
+    let isAutoRefreshRunning = false;
 
-        supabase.auth.stopAutoRefresh();
-      },
-    );
+    const startAutoRefresh = (): void => {
+      if (isAutoRefreshRunning) {
+        return;
+      }
+
+      supabase.auth.startAutoRefresh();
+      isAutoRefreshRunning = true;
+    };
+
+    const stopAutoRefresh = (): void => {
+      if (!isAutoRefreshRunning) {
+        return;
+      }
+
+      supabase.auth.stopAutoRefresh();
+      isAutoRefreshRunning = false;
+    };
+
+    if (AppState.currentState === "active") {
+      startAutoRefresh();
+    }
+
+    const appStateSubscription = AppState.addEventListener("change", (state: AppStateStatus) => {
+      if (state === "active") {
+        startAutoRefresh();
+        return;
+      }
+
+      stopAutoRefresh();
+    });
 
     return () => {
       isMounted = false;
       subscription.unsubscribe();
       appStateSubscription.remove();
+      stopAutoRefresh();
     };
   }, [appQueryClient, clearAuth, clearOrg, setInitialised, setSession, setUser]);
 

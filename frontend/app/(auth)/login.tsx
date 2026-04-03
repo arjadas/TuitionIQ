@@ -87,9 +87,17 @@ export default function LoginScreen() {
 
   const openEmailApp = async (): Promise<void> => {
     setErrorMessage(null);
+    const mailtoUrl = `mailto:${email.trim()}`;
 
     try {
-      await Linking.openURL("message://");
+      const canOpenMailClient = await Linking.canOpenURL(mailtoUrl);
+
+      if (!canOpenMailClient) {
+        setErrorMessage("Could not open an email app on this device.");
+        return;
+      }
+
+      await Linking.openURL(mailtoUrl);
     } catch {
       setErrorMessage("Could not open an email app on this device.");
     }

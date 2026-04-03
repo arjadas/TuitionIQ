@@ -32,15 +32,7 @@ apiClient.interceptors.response.use(
   async (error: AxiosError) => {
     const statusCode = error.response?.status;
 
-    if (statusCode === 401) {
-      await supabase.auth.signOut();
-      useAuthStore.getState().clearAuth();
-      useOrgStore.getState().clearOrg();
-      queryClient.clear();
-      router.replace("/login");
-    }
-
-    if (statusCode === 403) {
+    if (statusCode === 401 || statusCode === 403) {
       await supabase.auth.signOut();
       useAuthStore.getState().clearAuth();
       useOrgStore.getState().clearOrg();
