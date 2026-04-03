@@ -7,12 +7,13 @@ import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import * as SplashScreen from "expo-splash-screen";
 import { router, Stack } from "expo-router";
 import { AppState, type AppStateStatus } from "react-native";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 void SplashScreen.preventAutoHideAsync();
 
 function RootNavigator() {
   const appQueryClient = useQueryClient();
+  const isAutoRefreshRunning = useRef(false);
   const isInitialised = useAuthStore((state) => state.isInitialised);
   const setSession = useAuthStore((state) => state.setSession);
   const setUser = useAuthStore((state) => state.setUser);
@@ -83,24 +84,22 @@ function RootNavigator() {
       }
     });
 
-    let isAutoRefreshRunning = false;
-
     const startAutoRefresh = (): void => {
-      if (isAutoRefreshRunning) {
+      if (isAutoRefreshRunning.current) {
         return;
       }
 
       supabase.auth.startAutoRefresh();
-      isAutoRefreshRunning = true;
+      isAutoRefreshRunning.current = true;
     };
 
     const stopAutoRefresh = (): void => {
-      if (!isAutoRefreshRunning) {
+      if (!isAutoRefreshRunning.current) {
         return;
       }
 
       supabase.auth.stopAutoRefresh();
-      isAutoRefreshRunning = false;
+      isAutoRefreshRunning.current = false;
     };
 
     if (AppState.currentState === "active") {
