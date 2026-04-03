@@ -1,15 +1,60 @@
-## Naming conventions (recommended)
+# Welcome to your Expo app 👋
 
-Use consistent file and folder naming to make the frontend codebase predictable and easy to navigate. Recommended conventions:
+This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
 
-- **Components:** PascalCase, `.tsx` extension. One component per file. Example: `src/components/StudentCard.tsx`.
-- **Pages / Views:** PascalCase, placed under `src/pages/` or `src/views`. Example: `src/pages/PaymentsPage.tsx`.
-- **Hooks:** `use` prefix + camelCase, `.ts` or `.tsx` (if returning JSX). Example: `src/hooks/usePayments.ts`.
-- **Services / API clients:** camelCase or kebab-case filenames, default export for the client. Example: `src/services/paymentService.ts` or `src/services/payment-service.ts`.
-- **Utilities / helpers:** camelCase, grouped in `src/utils/`. Example: `src/utils/formatDate.ts`.
-- **Types:** keep TypeScript type declarations in `src/types/` and name files after the domain model. Prefer `payment-record.types.ts` or `paymentRecord.types.ts`. Example: `src/types/payment-record.types.ts`.
-- **Styles:** colocate component styles (e.g., `StudentCard.module.css` or `StudentCard.module.scss`) or use a global `src/styles/` for shared tokens.
-- **Assets:** store under `src/assets/` and use kebab-case for filenames, e.g. `src/assets/logo.svg`.
-- **Tests:** use the same filename as the subject plus `.test.ts` / `.test.tsx`. Example: `StudentCard.test.tsx`.
+## Get started
 
-Consistency tip: prefer one style (kebab-case vs camelCase) for filenames across the project and document it here so contributors follow the same pattern.
+1. Install dependencies
+
+   ```bash
+   npm install
+   ```
+
+2. Start the app
+
+   ```bash
+   npx expo start
+   ```
+
+In the output, you'll find options to open the app in a
+
+- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
+- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
+- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
+- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+
+You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+
+## API setup for TuitionIQ
+
+1. Start backend API from the project root:
+
+   ```bash
+   dotnet run --project ./backend/src/TuitionIQ.Api/TuitionIQ.Api.csproj --urls "http://0.0.0.0:5000"
+   ```
+
+2. Set API base URL in `.env` inside this folder:
+
+   ```bash
+   EXPO_PUBLIC_API_BASE_URL=http://localhost:5000/api
+   ```
+
+3. Platform notes:
+
+- Android emulator: use `http://10.0.2.2:5000/api`
+- iOS simulator / web: use `http://localhost:5000/api`
+- Physical device (Expo Go): use your machine LAN IP, e.g. `http://192.168.x.x:5000/api`
+
+## Learn more
+
+To learn more about developing your project with Expo, look at the following resources:
+
+- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
+- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+
+## Join the community
+
+Join our community of developers creating universal apps.
+
+- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
+- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
