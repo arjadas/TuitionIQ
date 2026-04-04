@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import type { OrganizationMembershipDto, UserProfileDto } from "@tuitioniq/types";
+import type { MembershipDto, UserProfileDto } from "@tuitioniq/types";
 import { type Href, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useOrgMemberships } from "@/src/features/organizations/hooks/useOrgMemberships";
@@ -8,14 +8,14 @@ import { useOrgStore } from "@/src/store/orgStore";
 
 type HomeScreenState = {
   currentUser: UserProfileDto | null;
-  memberships: OrganizationMembershipDto[];
+  memberships: MembershipDto[];
   isLoading: boolean;
   shouldShowProfileCompletion: boolean;
   shouldShowWelcome: boolean;
   shouldShowOrgSelector: boolean;
   errorMessage: string | null;
   onProfileCompleted: (profile: UserProfileDto) => void;
-  onSelectOrg: (membership: OrganizationMembershipDto) => void;
+  onSelectOrg: (membership: MembershipDto) => void;
   onCreateOrganization: () => void;
 };
 
@@ -73,7 +73,7 @@ export function useHomeScreenState(): HomeScreenState {
   );
 
   const onSelectOrg = useCallback(
-    (membership: OrganizationMembershipDto) => {
+    (membership: MembershipDto) => {
       selectOrg(membership.organizationId);
       router.replace("/dashboard" as Href);
     },

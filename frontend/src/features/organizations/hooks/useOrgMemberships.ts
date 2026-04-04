@@ -1,5 +1,5 @@
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
-import type { OrganizationMembershipDto } from "@tuitioniq/types";
+import type { MembershipDto } from "@tuitioniq/types";
 import { useEffect } from "react";
 import { organizationsApiClient } from "@/src/features/organizations/services/organizationsApiClient";
 import { useOrgStore } from "@/src/store/orgStore";
@@ -12,10 +12,10 @@ type UseOrgMembershipsOptions = {
 
 export function useOrgMemberships(
   options?: UseOrgMembershipsOptions,
-): UseQueryResult<OrganizationMembershipDto[]> {
+): UseQueryResult<MembershipDto[]> {
   const setMemberships = useOrgStore((state) => state.setMemberships);
 
-  const query = useQuery<OrganizationMembershipDto[]>({
+  const query = useQuery<MembershipDto[]>({
     queryKey: organizationsMembershipsQueryKey,
     queryFn: organizationsApiClient.getMyMemberships,
     enabled: options?.enabled ?? true,
