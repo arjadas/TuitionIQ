@@ -44,7 +44,7 @@ builder.Services.AddValidatorsFromAssemblies(applicationAssemblies);
 
 builder.Services.AddCors(options =>
 {
-  options.AddDefaultPolicy("ExpoWebPolicy", policy =>
+  options.AddPolicy("ExpoWebPolicy", policy =>
   {
     policy.WithOrigins("http://localhost:8081", "https://tuitioniq.pages.dev")
           .AllowAnyHeader()
@@ -69,21 +69,6 @@ builder.Services.AddSwaggerGen(options =>
     In = ParameterLocation.Header,
     Description = "Enter JWT token in the format: Bearer {token}"
   });
-
-  options.AddSecurityRequirement(new OpenApiSecurityRequirement
-    {
-        {
-            new OpenApiSecurityScheme
-            {
-                Reference = new OpenApiReference
-                {
-                    Type = ReferenceType.SecurityScheme,
-                    Id = "Bearer"
-                }
-            },
-            Array.Empty<string>()
-        }
-    });
 });
 
 var app = builder.Build();
