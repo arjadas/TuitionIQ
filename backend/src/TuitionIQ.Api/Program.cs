@@ -26,9 +26,11 @@ builder.Services.AddEndpointsApiExplorer();
 
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
+  // Get the connection string from configuration (e.g. appsettings.json/ environment variables)
   var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException("ConnectionStrings:DefaultConnection is not configured.");
 
+  // Use Npgsql for PostgreSQL database access
   options.UseNpgsql(connectionString);
 });
 
