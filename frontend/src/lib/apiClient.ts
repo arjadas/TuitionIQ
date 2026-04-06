@@ -1,18 +1,88 @@
 import axios, { type AxiosError } from "axios";
+import Constants from "expo-constants";
 import { router } from "expo-router";
+import { Platform } from "react-native";
 import { queryClient } from "@/src/lib/queryClient";
 import { supabase } from "@/src/lib/supabase";
 import { useAuthStore } from "@/src/store/authStore";
 import { useOrgStore } from "@/src/store/orgStore";
 
-const apiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL;
+type ExpoHostMetadata = {
+  expoConfig?: {
+    hostUri?: string;
+  };
+  manifest2?: {
+    extra?: {
+      expoGo?: {
+        debuggerHost?: string;
+      };
+    };
+  };
+};
 
-if (!apiBaseUrl) {
-  throw new Error("Missing EXPO_PUBLIC_API_BASE_URL.");
+function trimTrailingSlashes(value: string): string {
+  return value.replace(/\/+$/, "");
 }
+
+function normalizeConfiguredBaseUrl(configuredBaseUrl: string): string {
+  const trimmed = trimTrailingSlashes(configuredBaseUrl.trim());
+  return trimmed.endsWith("/api") ? trimmed.slice(0, -4) : trimmed;
+}
+
+function isLoopbackHost(host: string): boolean {
+  return host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0";
+}
+
+function getExpoLanHost(): string | null {
+  const hostMetadata = Constants as unknown as ExpoHostMetadata;
+  const hostUri = hostMetadata.expoConfig?.hostUri ?? hostMetadata.manifest2?.extra?.expoGo?.debuggerHost;
+  if (!hostUri) {
+    return null;
+  }
+
+  const [host] = hostUri.split(":");
+  return host || null;
+}
+
+function resolveApiBaseUrl(): string {
+  const configuredBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL;
+
+  if (!configuredBaseUrl) {
+    throw new Error("Missing EXPO_PUBLIC_API_BASE_URL.");
+  }
+
+  const normalizedBaseUrl = normalizeConfiguredBaseUrl(configuredBaseUrl);
+
+  if (Platform.OS === "web") {
+    return normalizedBaseUrl;
+  }
+
+  try {
+    const parsedBaseUrl = new URL(normalizedBaseUrl);
+    if (!isLoopbackHost(parsedBaseUrl.hostname)) {
+      return normalizedBaseUrl;
+    }
+
+    const expoLanHost = getExpoLanHost();
+    if (!expoLanHost) {
+      return normalizedBaseUrl;
+    }
+
+    parsedBaseUrl.hostname = expoLanHost;
+    return trimTrailingSlashes(parsedBaseUrl.toString());
+  } catch {
+    return normalizedBaseUrl;
+  }
+}
+
+const apiBaseUrl = resolveApiBaseUrl();
 
 export const apiClient = axios.create({
   baseURL: apiBaseUrl,
+  headers: {
+    Accept: "application/json",
+    "Content-Type": "application/json",
+  },
 });
 
 apiClient.interceptors.request.use(async (config) => {
@@ -21,6 +91,7 @@ apiClient.interceptors.request.use(async (config) => {
   } = await supabase.auth.getSession();
 
   if (session?.access_token) {
+    config.headers = config.headers ?? {};
     config.headers.Authorization = `Bearer ${session.access_token}`;
   }
 
@@ -32,7 +103,7 @@ apiClient.interceptors.response.use(
   async (error: AxiosError) => {
     const statusCode = error.response?.status;
 
-    if (statusCode === 401 || statusCode === 403) {
+    if (statusCode === 401) {
       await supabase.auth.signOut();
       useAuthStore.getState().clearAuth();
       useOrgStore.getState().clearOrg();
