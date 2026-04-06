@@ -34,24 +34,16 @@ public sealed class UpdateOrganizationCommandValidator : AbstractValidator<Updat
 public sealed class UpdateOrganizationCommandHandler : IRequestHandler<UpdateOrganizationCommand, OrganizationDto>
 {
   private readonly IAppDbContext _dbContext;
+  private readonly IAuditLogService _auditLogService;
 
-  public UpdateOrganizationCommandHandler(IAppDbContext dbContext)
+  public UpdateOrganizationCommandHandler(IAppDbContext dbContext, IAuditLogService auditLogService)
   {
     _dbContext = dbContext;
+    _auditLogService = auditLogService;
   }
 
   public async Task<OrganizationDto> Handle(UpdateOrganizationCommand request, CancellationToken cancellationToken)
   {
-    IQueryable<OrganizationMemberRole?> membershipRoleQuery = _dbContext.OrganizationMembers
-      .Where(membership => membership.OrganizationId == request.OrganizationId && membership.UserId == request.UserId)
-      .Select(membership => (OrganizationMemberRole?)membership.Role);
-
-    var callerRole = await _dbContext.FirstOrDefaultAsync(membershipRoleQuery, cancellationToken);
-    if (callerRole is not OrganizationMemberRole.Owner and not OrganizationMemberRole.Admin)
-    {
-      throw new NotFoundException($"Organization with id '{request.OrganizationId}' was not found.");
-    }
-
     IQueryable<Organization> organizationQuery = _dbContext.Organizations
       .Where(organization => organization.Id == request.OrganizationId);
 
@@ -59,6 +51,16 @@ public sealed class UpdateOrganizationCommandHandler : IRequestHandler<UpdateOrg
     if (organization is null)
     {
       throw new NotFoundException($"Organization with id '{request.OrganizationId}' was not found.");
+    }
+
+    IQueryable<OrganizationMemberRole?> membershipRoleQuery = _dbContext.OrganizationMembers
+      .Where(membership => membership.OrganizationId == request.OrganizationId && membership.UserId == request.UserId)
+      .Select(membership => (OrganizationMemberRole?)membership.Role);
+
+    var callerRole = await _dbContext.FirstOrDefaultAsync(membershipRoleQuery, cancellationToken);
+    if (callerRole is not OrganizationMemberRole.Owner and not OrganizationMemberRole.Admin)
+    {
+      throw new ForbiddenException("You are not allowed to update this organization.");
     }
 
     var oldValues = new Dictionary<string, object?>();
@@ -83,7 +85,7 @@ public sealed class UpdateOrganizationCommandHandler : IRequestHandler<UpdateOrg
     var now = DateTimeOffset.UtcNow;
     organization.UpdatedAt = now;
 
-    _dbContext.AddAuditLog(new AuditLog(Guid.NewGuid(), "organization.updated", "organizations", now)
+    _auditLogService.Add(new AuditLog(Guid.NewGuid(), "organization.updated", "organizations", now)
     {
       OrganizationId = organization.Id,
       ActorId = request.UserId,

@@ -1,5 +1,6 @@
 using FluentValidation;
 using MediatR;
+using TuitionIQ.Application.Common.Exceptions;
 using TuitionIQ.Application.Common.Interfaces;
 using TuitionIQ.Application.Features.Organizations.Dtos;
 using TuitionIQ.Domain.Entities;
@@ -12,12 +13,9 @@ public sealed record CreateOrganizationCommand(Guid UserId, string Name, string 
 public sealed class CreateOrganizationCommandValidator : AbstractValidator<CreateOrganizationCommand>
 {
   private const string SlugPattern = "^[a-z0-9-]+$";
-  private readonly IAppDbContext _dbContext;
 
-  public CreateOrganizationCommandValidator(IAppDbContext dbContext)
+  public CreateOrganizationCommandValidator()
   {
-    _dbContext = dbContext;
-
     RuleFor(command => command.Name)
       .NotEmpty()
       .MaximumLength(255);
@@ -26,32 +24,18 @@ public sealed class CreateOrganizationCommandValidator : AbstractValidator<Creat
       .NotEmpty()
       .MaximumLength(100)
       .Matches(SlugPattern);
-
-    RuleFor(command => command.Slug)
-      .MustAsync(BeUniqueSlugAsync)
-      .WithMessage("Slug is already in use.");
-  }
-
-  private async Task<bool> BeUniqueSlugAsync(string slug, CancellationToken cancellationToken)
-  {
-    var normalizedSlug = slug.Trim().ToLowerInvariant();
-
-    IQueryable<string> slugQuery = _dbContext.Organizations
-      .Select(organization => organization.Slug)
-      .Where(existingSlug => existingSlug == normalizedSlug);
-
-    var existingSlug = await _dbContext.FirstOrDefaultAsync(slugQuery, cancellationToken);
-    return existingSlug is null;
   }
 }
 
 public sealed class CreateOrganizationCommandHandler : IRequestHandler<CreateOrganizationCommand, OrganizationDto>
 {
   private readonly IAppDbContext _dbContext;
+  private readonly IAuditLogService _auditLogService;
 
-  public CreateOrganizationCommandHandler(IAppDbContext dbContext)
+  public CreateOrganizationCommandHandler(IAppDbContext dbContext, IAuditLogService auditLogService)
   {
     _dbContext = dbContext;
+    _auditLogService = auditLogService;
   }
 
   public async Task<OrganizationDto> Handle(CreateOrganizationCommand request, CancellationToken cancellationToken)
@@ -60,6 +44,16 @@ public sealed class CreateOrganizationCommandHandler : IRequestHandler<CreateOrg
     var organizationId = Guid.NewGuid();
     var normalizedName = request.Name.Trim();
     var normalizedSlug = request.Slug.Trim().ToLowerInvariant();
+
+    IQueryable<Guid> slugQuery = _dbContext.Organizations
+      .Where(organization => organization.Slug == normalizedSlug)
+      .Select(organization => organization.Id);
+
+    var existingOrganizationId = await _dbContext.FirstOrDefaultAsync(slugQuery, cancellationToken);
+    if (existingOrganizationId != Guid.Empty)
+    {
+      throw new ConflictException($"Organization slug '{normalizedSlug}' is already in use.");
+    }
 
     var organization = new Organization
     {
@@ -87,7 +81,7 @@ public sealed class CreateOrganizationCommandHandler : IRequestHandler<CreateOrg
     _dbContext.Add(organization);
     _dbContext.Add(ownerMembership);
 
-    _dbContext.AddAuditLog(new AuditLog(Guid.NewGuid(), "organization.created", "organizations", now)
+    _auditLogService.Add(new AuditLog(Guid.NewGuid(), "organization.created", "organizations", now)
     {
       OrganizationId = organizationId,
       ActorId = request.UserId,
