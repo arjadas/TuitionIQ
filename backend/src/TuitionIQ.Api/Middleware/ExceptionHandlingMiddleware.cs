@@ -31,7 +31,10 @@ public sealed class ExceptionHandlingMiddleware
   {
     if (context.Response.HasStarted)
     {
-      throw;
+      // We can't write a new JSON response if the headers were already sent.
+      // Just log it and stop execution.
+      _logger.LogWarning(exception, "The response has already started, cannot write ProblemDetails.");
+      return;
     }
 
     var (statusCode, title, detail, errors) = MapException(exception);
