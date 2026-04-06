@@ -31,7 +31,7 @@ public sealed class ExceptionHandlingMiddleware
   {
     if (context.Response.HasStarted)
     {
-      throw exception;
+      throw;
     }
 
     var (statusCode, title, detail, errors) = MapException(exception);
