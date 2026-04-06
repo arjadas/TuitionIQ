@@ -1,5 +1,13 @@
+import { useAuthStore } from "@/src/store/authStore";
 import { Redirect } from "expo-router";
 
 export default function Index() {
-  return <Redirect href="/login" />;
+  const isInitialised = useAuthStore((state) => state.isInitialised);
+  const session = useAuthStore((state) => state.session);
+
+  if (!isInitialised) {
+    return null;
+  }
+
+  return <Redirect href={session ? "/home" : "/login"} />;
 }
