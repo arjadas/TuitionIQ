@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { CreateOrganizationRequest } from "@tuitioniq/types";
+import { AxiosError } from "axios";
 import { type Href, useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import {
@@ -25,10 +26,34 @@ function toSlug(value: string): string {
     .replace(/^-|-$/g, "");
 }
 
+function getMutationErrorMessage(error: unknown): string {
+  if (error instanceof AxiosError) {
+    const responseData = error.response?.data;
+    if (typeof responseData === "object" && responseData !== null) {
+      const problemDetails = responseData as Record<string, unknown>;
+
+      if (typeof problemDetails.detail === "string" && problemDetails.detail.trim().length > 0) {
+        return problemDetails.detail;
+      }
+
+      if (typeof problemDetails.title === "string" && problemDetails.title.trim().length > 0) {
+        return problemDetails.title;
+      }
+    }
+  }
+
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+
+  return "Could not create organization. Please try again.";
+}
+
 export function CreateOrgForm() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const selectOrg = useOrgStore((state) => state.selectOrg);
+  const setMemberships = useOrgStore((state) => state.setMemberships);
 
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
@@ -38,10 +63,17 @@ export function CreateOrgForm() {
   const mutation = useMutation({
     mutationFn: organizationsApiClient.createOrg,
     onSuccess: async (organization) => {
-      selectOrg(organization.id);
+      const memberships = await organizationsApiClient.getMyMemberships();
+      setMemberships(memberships);
+      queryClient.setQueryData(organizationsMembershipsQueryKey, memberships);
+
+      const createdMembership = memberships.find((membership) => membership.organizationId === organization.id);
+      selectOrg(createdMembership?.organizationId ?? organization.id);
+
       await queryClient.invalidateQueries({
         queryKey: organizationsMembershipsQueryKey,
       });
+
       router.replace("/dashboard" as Href);
     },
   });
@@ -114,13 +146,13 @@ export function CreateOrgForm() {
 
   return (
     <View style={styles.card}>
-      <Text style={styles.title}>Create your organisation</Text>
+      <Text style={styles.title}>Create your organization</Text>
       <Text style={styles.subtitle}>
-        You can update organisation settings later from the admin area.
+        You can update organization settings later from the admin area.
       </Text>
 
       <View style={styles.fieldBlock}>
-        <Text style={styles.label}>Organisation name</Text>
+        <Text style={styles.label}>Organization name</Text>
         <TextInput
           autoCapitalize="words"
           onChangeText={onNameChanged}
@@ -146,9 +178,7 @@ export function CreateOrgForm() {
       {validationError ? <Text style={styles.errorText}>{validationError}</Text> : null}
       {mutation.isError ? (
         <Text style={styles.errorText}>
-          {mutation.error instanceof Error
-            ? mutation.error.message
-            : "Could not create organization. Please try again."}
+          {getMutationErrorMessage(mutation.error)}
         </Text>
       ) : null}
 
@@ -162,7 +192,7 @@ export function CreateOrgForm() {
         {mutation.isPending ? (
           <ActivityIndicator color="#ffffff" />
         ) : (
-          <Text style={styles.submitButtonText}>Create organisation</Text>
+          <Text style={styles.submitButtonText}>Create organization</Text>
         )}
       </Pressable>
     </View>
