@@ -21,6 +21,8 @@ public class AppDbContext : DbContext, IAppDbContext
   public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
   IQueryable<User> IAppDbContext.Users => Users;
+  IQueryable<Organization> IAppDbContext.Organizations => Organizations;
+  IQueryable<OrganizationMember> IAppDbContext.OrganizationMembers => OrganizationMembers;
 
   protected override void OnModelCreating(ModelBuilder modelBuilder)
   {
@@ -49,6 +51,11 @@ public class AppDbContext : DbContext, IAppDbContext
     return base.SaveChangesAsync(cancellationToken);
   }
 
+  void IAppDbContext.Add<TEntity>(TEntity entity)
+  {
+    Set<TEntity>().Add(entity);
+  }
+
   public void AddAuditLog(AuditLog auditLog)
   {
     AuditLogs.Add(auditLog);
@@ -57,6 +64,11 @@ public class AppDbContext : DbContext, IAppDbContext
   public Task<T?> FirstOrDefaultAsync<T>(IQueryable<T> query, CancellationToken cancellationToken = default)
   {
     return EntityFrameworkQueryableExtensions.FirstOrDefaultAsync(query, cancellationToken);
+  }
+
+  public Task<List<T>> ToListAsync<T>(IQueryable<T> query, CancellationToken cancellationToken = default)
+  {
+    return EntityFrameworkQueryableExtensions.ToListAsync(query, cancellationToken);
   }
 
   private void EnsureAuditLogIsInsertOnly()

@@ -14,14 +14,30 @@ declare module "@tuitioniq/types" {
     phone?: string | null;
   };
 
-  export type OrganizationMembershipDto = {
+  export type OrganizationDto = {
+    id: string;
+    name: string;
+    slug: string;
+    plan: string;
+    createdAt: string;
+  };
+
+  export type MembershipDto = {
     organizationId: string;
     role: string;
-    organization: {
-      id: string;
-      name: string;
-      slug: string;
-      plan: string;
-    };
+    joinedAt?: string | null;
+    organization: OrganizationDto;
   };
+
+  export type CreateOrganizationRequest = {
+    name: string;
+    slug: string;
+  };
+
+  export type UpdateOrganizationRequest = {
+    name?: string | null;
+    settings?: unknown;
+  };
+
+  export type OrganizationMembershipDto = MembershipDto;
 }

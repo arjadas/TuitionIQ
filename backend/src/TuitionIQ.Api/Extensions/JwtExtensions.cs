@@ -10,16 +10,16 @@ public static class JwtExtensions
 {
   public static IServiceCollection AddSupabaseJwtAuthentication(this IServiceCollection services, IConfiguration configuration)
   {
-    var jwtSecret = configuration["SUPABASE_JWT_SECRET"] ?? configuration["Supabase:JwtSecret"];
+    var jwtSecret = configuration["Supabase:JwtSecret"];
     if (string.IsNullOrWhiteSpace(jwtSecret))
     {
-      throw new InvalidOperationException("SUPABASE_JWT_SECRET is not configured.");
+      throw new InvalidOperationException("Supabase:JwtSecret is not configured.");
     }
 
-    var projectRef = configuration["SUPABASE_PROJECT_REF"] ?? configuration["Supabase:ProjectRef"];
+    var projectRef = configuration["Supabase:ProjectRef"];
     if (string.IsNullOrWhiteSpace(projectRef))
     {
-      throw new InvalidOperationException("SUPABASE_PROJECT_REF is not configured.");
+      throw new InvalidOperationException("Supabase:ProjectRef is not configured.");
     }
 
     services

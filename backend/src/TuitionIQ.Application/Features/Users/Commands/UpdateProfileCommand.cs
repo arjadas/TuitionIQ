@@ -30,10 +30,12 @@ public sealed class UpdateProfileCommandValidator : AbstractValidator<UpdateProf
 public sealed class UpdateProfileCommandHandler : IRequestHandler<UpdateProfileCommand, UserProfileDto>
 {
   private readonly IAppDbContext _dbContext;
+  private readonly IAuditLogService _auditLogService;
 
-  public UpdateProfileCommandHandler(IAppDbContext dbContext)
+  public UpdateProfileCommandHandler(IAppDbContext dbContext, IAuditLogService auditLogService)
   {
     _dbContext = dbContext;
+    _auditLogService = auditLogService;
   }
 
   public async Task<UserProfileDto> Handle(UpdateProfileCommand request, CancellationToken cancellationToken)
@@ -64,7 +66,7 @@ public sealed class UpdateProfileCommandHandler : IRequestHandler<UpdateProfileC
     user.Phone = normalizedPhone;
     user.UpdatedAt = updatedAt;
 
-    _dbContext.AddAuditLog(new AuditLog(Guid.NewGuid(), "user.profile.updated", "users", updatedAt)
+    _auditLogService.Add(new AuditLog(Guid.NewGuid(), "user.profile.updated", "users", updatedAt)
     {
       ActorId = user.Id,
       EntityId = user.Id,

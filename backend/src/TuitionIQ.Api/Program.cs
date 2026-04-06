@@ -4,31 +4,25 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi;
 using TuitionIQ.Api.Extensions;
 using TuitionIQ.Api.Middleware;
+using TuitionIQ.Application.Common.Behaviors;
 using TuitionIQ.Application.Common.Interfaces;
 using TuitionIQ.Infrastructure.Auth;
 using TuitionIQ.Infrastructure.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
 
-var applicationAssemblies = AppDomain.CurrentDomain
-    .GetAssemblies()
-    .Where(static assembly =>
-        assembly.GetName().Name?.StartsWith("TuitionIQ.Application", StringComparison.Ordinal) == true)
-    .ToArray();
-
-if (applicationAssemblies.Length == 0)
-{
-  applicationAssemblies = new[] { typeof(TuitionIQ.Application.AssemblyReference).Assembly };
-}
+var applicationAssembly = typeof(TuitionIQ.Application.AssemblyReference).Assembly;
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
+  // Get the connection string from configuration (e.g. appsettings.json/ environment variables)
   var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException("ConnectionStrings:DefaultConnection is not configured.");
 
+  // Use Npgsql for PostgreSQL database access
   options.UseNpgsql(connectionString);
 });
 
@@ -38,13 +32,15 @@ builder.Services.AddAuthorization();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IAppDbContext>(serviceProvider => serviceProvider.GetRequiredService<AppDbContext>());
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
+builder.Services.AddScoped<IAuditLogService, AuditLogService>();
 
-builder.Services.AddMediatR(configuration => configuration.RegisterServicesFromAssemblies(applicationAssemblies));
-builder.Services.AddValidatorsFromAssemblies(applicationAssemblies);
+builder.Services.AddMediatR(configuration => configuration.RegisterServicesFromAssembly(applicationAssembly));
+builder.Services.AddValidatorsFromAssembly(applicationAssembly);
+builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
 
 builder.Services.AddCors(options =>
 {
-  options.AddDefaultPolicy("ExpoWebPolicy", policy =>
+  options.AddPolicy("ExpoWebPolicy", policy =>
   {
     policy.WithOrigins("http://localhost:8081", "https://tuitioniq.pages.dev")
           .AllowAnyHeader()
@@ -70,19 +66,9 @@ builder.Services.AddSwaggerGen(options =>
     Description = "Enter JWT token in the format: Bearer {token}"
   });
 
-  options.AddSecurityRequirement(new OpenApiSecurityRequirement
+  options.AddSecurityRequirement(document => new OpenApiSecurityRequirement
     {
-        {
-            new OpenApiSecurityScheme
-            {
-                Reference = new OpenApiReference
-                {
-                    Type = ReferenceType.SecurityScheme,
-                    Id = "Bearer"
-                }
-            },
-            Array.Empty<string>()
-        }
+        [new OpenApiSecuritySchemeReference("Bearer", document)] = new List<string>()
     });
 });
 
@@ -98,15 +84,17 @@ app.UseHttpsRedirection();  // Redirect HTTP requests to HTTPS for secure commun
 
 app.UseRouting();  // Matches the incoming request to an endpoint (but doesn’t execute it yet)
 
-app.UseCors("ExpoWebPolicy");  // Adds CORS headers so browsers allow requests from approved frontend origins
+app.UseMiddleware<ExceptionHandlingMiddleware>();
 
-app.UseMiddleware<UserActiveCheckMiddleware>();  
-// Custom check to ensure the user/account is still active before continuing
+app.UseCors("ExpoWebPolicy");  // Adds CORS headers so browsers allow requests from approved frontend origins
 
 app.UseMiddleware<OriginValidationMiddleware>();  
 // Optional security layer to validate request origin (extra protection beyond CORS, e.g. CSRF hardening)
 
 app.UseAuthentication();  // Identifies the user (e.g. validates JWT and sets HttpContext.User)
+
+app.UseMiddleware<UserActiveCheckMiddleware>();
+// Custom check to ensure the user/account is still active after authentication has populated HttpContext.User
 
 app.UseAuthorization();  // Enforces access rules (e.g. [Authorize] attributes, roles, policies)
 

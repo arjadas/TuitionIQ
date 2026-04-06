@@ -36,14 +36,16 @@ You can start developing by editing the files inside the **app** directory. This
 2. Set API base URL in `.env` inside this folder:
 
    ```bash
-   EXPO_PUBLIC_API_BASE_URL=http://localhost:5000/api
+   EXPO_PUBLIC_API_BASE_URL=http://localhost:5000
    ```
+
+   The client automatically prefixes requests with `/api`, so keep this value at the API host root.
 
 3. Platform notes:
 
-- Android emulator: use `http://10.0.2.2:5000/api`
-- iOS simulator / web: use `http://localhost:5000/api`
-- Physical device (Expo Go): use your machine LAN IP, e.g. `http://192.168.x.x:5000/api`
+- Android emulator: use `http://10.0.2.2:5000`
+- iOS simulator / web: use `http://localhost:5000`
+- Physical device (Expo Go): use your machine LAN IP, e.g. `http://192.168.x.x:5000`
 
 ## Learn more
 
