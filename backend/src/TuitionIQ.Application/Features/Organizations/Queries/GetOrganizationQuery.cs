@@ -18,6 +18,16 @@ public sealed class GetOrganizationQueryHandler : IRequestHandler<GetOrganizatio
 
   public async Task<OrganizationDto> Handle(GetOrganizationQuery request, CancellationToken cancellationToken)
   {
+    IQueryable<Guid> organizationExistenceQuery = _dbContext.Organizations
+      .Where(organization => organization.Id == request.OrganizationId)
+      .Select(organization => organization.Id);
+
+    var organizationId = await _dbContext.FirstOrDefaultAsync(organizationExistenceQuery, cancellationToken);
+    if (organizationId == Guid.Empty)
+    {
+      throw new NotFoundException($"Organization with id '{request.OrganizationId}' was not found.");
+    }
+
     IQueryable<OrganizationDto> organizationQuery =
       from organization in _dbContext.Organizations
       join membership in _dbContext.OrganizationMembers
@@ -35,7 +45,7 @@ public sealed class GetOrganizationQueryHandler : IRequestHandler<GetOrganizatio
     var organizationDto = await _dbContext.FirstOrDefaultAsync(organizationQuery, cancellationToken);
     if (organizationDto is null)
     {
-      throw new NotFoundException($"Organization with id '{request.OrganizationId}' was not found.");
+      throw new ForbiddenException("You are not allowed to access this organization.");
     }
 
     return organizationDto;
