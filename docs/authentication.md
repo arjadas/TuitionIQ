@@ -1,6 +1,6 @@
 # TuitionIQ — Production-Grade Authentication System
 
-### Using Supabase Authentication · v1.3.0
+### Using Supabase Authentication · v2.0.0
 
 > **Audience:** AI agents, backend engineers, and frontend developers implementing the auth system.
 > **Auth provider:** Supabase Auth
@@ -21,9 +21,11 @@ The user column mapping with Supabase Auth is:
 **Two separate user tables exist and must never be conflated:**
 
 - `auth.users` — Supabase's internal table. Managed entirely by Supabase Auth. Do not write to it directly.
-- `public.users` — TuitionIQ's canonical identity record. Populated by a Supabase database trigger on first login. All business logic, the C# API, and RLS policies reference this table exclusively.
+- `public.users` — TuitionIQ's canonical identity record. Populated by a Supabase database trigger on first registration. All business logic, the C# API, and RLS policies reference this table exclusively.
 
-**Authentication method:** TuitionIQ uses **passwordless magic link authentication only**, for all user types (teachers, admins, students). There are no passwords in this system. The `signInWithOtp` flow handles both new user registration and returning user login in a single call — Supabase creates the `auth.users` record automatically on first use.
+**Authentication method:** TuitionIQ uses **email and password authentication**. Users register with their first name, last name, email, and password. Returning users log in with email and password. After a user's **first successful login**, a one-time email OTP verification step is required before full access is granted. This OTP step is a post-login identity verification check — it is not part of the login credential itself.
+
+**Password management:** Passwords are managed entirely by Supabase Auth. TuitionIQ never stores, hashes, or handles raw passwords. The `public.users` table has no password column. Password reset is handled through Supabase's recovery flow.
 
 ---
 
@@ -36,7 +38,7 @@ The user column mapping with Supabase Auth is:
 5. [Security Best Practices](#5-security-best-practices)
 6. [Performance & Scalability](#6-performance--scalability)
 7. [UX Considerations](#7-ux-considerations)
-8. [Passwordless Authentication — Design Rationale](#8-passwordless-authentication--design-rationale)
+8. [Password Authentication — Design Rationale](#8-password-authentication--design-rationale)
 9. [Pitfalls & Brutal Critique](#9-pitfalls--brutal-critique)
 10. [Implementation Checklist](#10-implementation-checklist)
 
@@ -50,7 +52,10 @@ The user column mapping with Supabase Auth is:
 ┌──────────────────────────────────────────────────────────────────────┐
 │              CLIENT — React Expo (Web + Mobile)                      │
 │                                                                      │
-│   @supabase/supabase-js  →  signInWithOtp()  →  Supabase Auth API   │
+│   @supabase/supabase-js  →  signUp() / signInWithPassword()         │
+│                          →  resetPasswordForEmail() / updateUser()   │
+│                          →  signInWithOtp() / verifyOtp()            │
+│                             (email OTP verification step only)       │
 └───────────────────────────┬──────────────────────────────────────────┘
                             │  Bearer JWT (access_token)
               ┌─────────────┴─────────────┐
@@ -75,9 +80,11 @@ The user column mapping with Supabase Auth is:
                               └───────────────────────────────────────┘
 
 Data flow summary:
-  Auth (magic link dispatch, session exchange) → Supabase Auth directly from client
-  Data reads (student lists, fee periods)      → C# ASP.NET Core API
-  Business logic writes (payments, invites)    → C# ASP.NET Core API
+  Registration / login / password reset  → Supabase Auth directly from client
+  Email OTP verification (post-login)    → Supabase Auth directly from client
+                                           + PATCH /api/users/email-verification (C# API)
+  Data reads (student lists, fee periods) → C# ASP.NET Core API
+  Business logic writes (payments, invites) → C# ASP.NET Core API
   C# API verifies every JWT before processing via SUPABASE_JWT_SECRET
 ```
 
@@ -86,32 +93,94 @@ Supabase Auth remains the authentication provider, while the C# API is the singl
 
 ---
 
-### 1.2 Magic Link Flow — Core Mechanic
+### 1.2 Email + Password Auth — Core Mechanic
 
-Before the registration paths, understand how `signInWithOtp` works:
+Before the registration paths, understand how the Supabase email/password methods work:
 
 ```
-supabase.auth.signInWithOtp({ email }) does TWO things in one call:
+supabase.auth.signUp({ email, password, options: { data: { first_name, last_name } } })
+  → Creates auth.users row with hashed password managed by Supabase.
+  → Fires the after_auth_user_created DB trigger (Section 1.3), which creates public.users
+    with first_name and last_name populated from raw_user_meta_data.
+  → Returns a session immediately (auto-login on signup).
+  → email_verified is set to FALSE in public.users — post-login OTP verification is required.
 
-  Case A — auth.users row already EXISTS for this email:
-    → Supabase sends a magic link. This is a LOGIN.
+supabase.auth.signInWithPassword({ email, password })
+  → Validates credentials against auth.users (Supabase-managed).
+  → Returns { data: { session, user }, error }.
+  → After session is established, the app checks public.users.email_verified:
+      If FALSE → Email OTP verification flow (Section 1.2a) is required.
+      If TRUE  → Proceed directly to /home.
 
-  Case B — auth.users row does NOT EXIST for this email:
-    → Supabase creates the auth.users row, then sends a magic link. This is REGISTRATION.
+supabase.auth.resetPasswordForEmail(email, { redirectTo })
+  → Supabase sends a password reset email to the user with a recovery link.
+  → The link type is 'recovery'. On clicking, the app exchanges the PKCE code for a session,
+    then calls supabase.auth.updateUser({ password: newPassword }).
 
-There is no separate "signup" vs "login" screen. One email field. One button. Always.
-The user does not need to know or care which path was taken.
+supabase.auth.updateUser({ password: newPassword })
+  → Updates the password on the authenticated session (used in the reset flow).
+  → Called only after the recovery code has been exchanged for a session.
+```
 
-The database trigger (Section 1.3) fires on INSERT to auth.users for Case B only,
-creating the public.users row. On subsequent logins (Case A), the trigger does not fire
-because auth.users already exists — public.users was created on first login.
+---
+
+### 1.2a Email OTP Verification — Post-Login Step
+
+This flow applies to every user whose `public.users.email_verified = FALSE`. It fires after the first successful `signInWithPassword()` or `signUp()` call. It is a one-time identity confirmation step, not a recurring login factor.
+
+```
+TRIGGER: After signInWithPassword() or signUp() returns a valid session,
+         GET /api/users/me → check email_verified field.
+
+IF email_verified = FALSE:
+
+  STEP 1 — CLIENT
+    Call: await supabase.auth.signInWithOtp({
+      email: session.user.email,
+      options: { shouldCreateUser: false }
+      // shouldCreateUser: false — user already exists; this is purely OTP dispatch
+    })
+    Navigate to /auth/verify-email screen.
+    Show: "We've sent a 6-digit verification code to your email. Enter it below."
+    Display: resend option (60-second cooldown), "Use a different account" link.
+
+  STEP 2 — USER ENTERS OTP CODE
+    Call: const { error } = await supabase.auth.verifyOtp({
+      email: session.user.email,
+      token: otpCode,          // 6-digit code from email
+      type: 'email'
+    })
+    On success: session remains valid.
+
+  STEP 3 — MARK VERIFIED (C# ASP.NET Core API)
+    PATCH /api/users/email-verification
+    Authorization: Bearer <access_token>
+    Body: {}  // No body required — identity is taken from JWT 'sub' claim
+
+    C# API:
+      1. Validate JWT → extract user.id from 'sub' claim.
+      2. UPDATE public.users SET email_verified = TRUE, updated_at = NOW()
+             WHERE id = user.id AND email_verified = FALSE
+      3. INSERT audit_logs (action='user.email_verified', actor_id=user.id, ...)
+      4. Return 200.
+
+  STEP 4 — NAVIGATE TO HOME
+    router.replace('/home')
+    Normal org context resolution proceeds (Section 1.6).
+
+IF email_verified = TRUE:
+  Proceed directly to /home. No OTP step required.
+
+⚠️ The verify-email screen must be non-bypassable. If the user navigates away or
+   backgrounding the app, re-check email_verified on return to the protected route group.
+   Unverified users must not access (teacher) or (student) route groups.
 ```
 
 ---
 
 ### 1.3 Database Trigger — public.users Creation
 
-This trigger bridges Supabase's `auth.users` with TuitionIQ's `public.users`. It fires once per user, on first authentication.
+This trigger bridges Supabase's `auth.users` with TuitionIQ's `public.users`. It fires once per user, on first registration via `signUp()`. `first_name` and `last_name` are populated from the metadata passed to `signUp()`. `email_verified` is always initialized to `FALSE`.
 
 ```sql
 CREATE OR REPLACE FUNCTION public.handle_new_user()
@@ -119,15 +188,15 @@ RETURNS TRIGGER AS $$
 BEGIN
   INSERT INTO public.users (
     id, auth_user_id, email,
-    first_name, last_name, is_active, created_at, updated_at
+    first_name, last_name, email_verified, is_active, created_at, updated_at
   )
   VALUES (
     NEW.id,
-    'supabase',
     NEW.id::TEXT,
     NEW.email,
     COALESCE(NEW.raw_user_meta_data->>'first_name', ''),
     COALESCE(NEW.raw_user_meta_data->>'last_name',  ''),
+    FALSE,   -- always requires post-login OTP verification on first access
     TRUE,
     NOW(),
     NOW()
@@ -145,75 +214,125 @@ CREATE TRIGGER after_auth_user_created
 
 **Notes:**
 
-- `first_name` and `last_name` default to empty string, not `'Unknown'`. The profile completion screen (Section 7.1) collects the real values immediately after first login. Storing `'Unknown'` pollutes data.
-- `ON CONFLICT (id) DO NOTHING` makes the trigger idempotent. Supabase can internally retry auth operations in edge cases; this prevents a duplicate-row error.
-- With magic link only, `raw_user_meta_data` will be empty unless you call `signInWithOtp` with an `options.data` payload. For the standard "enter your email" screen, it will be empty — this is expected and handled by profile completion.
+- `first_name` and `last_name` are populated from `raw_user_meta_data` because the Sign Up form passes `options: { data: { first_name, last_name } }` to `signUp()`. For invite-first registrations (Section 1.4 Path B), the same Sign Up form is shown and the same metadata is passed. Empty strings are the fallback.
+- `email_verified = FALSE` is always the initial state. No user bypasses the post-login OTP step, including users registered via invite.
+- `ON CONFLICT (id) DO NOTHING` makes the trigger idempotent. Supabase can internally retry auth operations; this prevents a duplicate-row error.
+- Supabase Auth manages the password hash internally in `auth.users`. The `public.users` table has no password column and never receives credential data.
 
 ---
 
 ### 1.4 User Registration & Login Flows
 
-There are two valid entry paths matching the schema's dual-path lifecycle. Both use magic links.
+There are two valid entry paths. Both use email and password credentials.
 
 ---
 
-#### Path A — Self-Registration / Returning Login (any user)
+#### Path A — Self-Registration and Login (any user)
 
 ```
-STEP 1 — CLIENT (Expo Web or Mobile)
-  Single login screen — no separate /signup page.
-  User enters their email address.
+── SIGN UP ──────────────────────────────────────────────────────────────
 
-  Call: supabase.auth.signInWithOtp({
+STEP 1 — CLIENT (Expo Web or Mobile) — /auth/signup screen
+  User enters: first name, last name, email address, password, confirm password.
+  Validate client-side: passwords match, password meets strength requirements
+    (min 8 characters, at least one uppercase, one digit, one special character).
+
+  Call: supabase.auth.signUp({
     email: 'user@example.com',
+    password: 'SecurePassword1!',
     options: {
-      emailRedirectTo: Platform.OS === 'web'
-        ? 'https://app.tuitioniq.com/auth/callback'
-        : 'tuitioniq://auth/callback',
+      data: {
+        first_name: 'Jane',
+        last_name:  'Smith',
+      }
     }
   })
 
-  Show: "We've sent a login link to your email. Check your inbox."
-  Do not navigate away. Display resend option after 60 seconds.
+  On success:
+    Session returned immediately. User is logged in.
+    Supabase creates auth.users. DB trigger creates public.users (email_verified = FALSE).
+  On error { message: 'User already registered' }:
+    Show: "An account with this email already exists. Please log in instead."
+    Navigate to /auth/login with email pre-filled.
 
-STEP 2 — SUPABASE AUTH (automatic)
-  If auth.users exists for email → sends magic link (returning login).
-  If auth.users does not exist   → creates auth.users, fires trigger to create
-                                   public.users (empty name fields), sends magic link
-                                   (first-time registration).
+STEP 2 — EMAIL OTP VERIFICATION
+  email_verified = FALSE (always for new users).
+  Run Section 1.2a flow.
 
-STEP 3 — USER CLICKS MAGIC LINK IN EMAIL
-  Magic link URL format: https://app.tuitioniq.com/auth/callback?code=<PKCE code>
-
-  On Expo Web:
-    Browser opens the callback URL. The Expo Web app reads `code` from the URL params.
-
-  On Expo Native (iOS/Android):
-    Deep link is intercepted by the app via the configured scheme.
-    app.json: { "expo": { "scheme": "tuitioniq" } }
-    Redirect URL for native: tuitioniq://auth/callback
-    Expo Router or React Navigation handles the deep link route.
-
-STEP 4 — CLIENT (auth callback screen)
-  Call: const { data, error } = await supabase.auth.exchangeCodeForSession(code)
-
-  On success: session established. Tokens stored in SecureStore (see Section 3).
-
-  On web only — strip PKCE code from URL immediately after exchange:
-    window.history.replaceState({}, '', '/auth/callback')
-
-STEP 5 — NAVIGATE TO HOME (always)
+STEP 3 — NAVIGATE TO HOME
   router.replace('/home')
-  The /home screen resolves org context (Section 1.6).
-  The auth callback handler never redirects directly to a dashboard.
+  Org resolution proceeds (Section 1.6).
+  Profile completion check is not required — first_name and last_name were
+  collected at registration and written by the trigger.
 
-STEP 6 — PROFILE COMPLETION CHECK (home screen, new users only)
-  Query: SELECT first_name, last_name FROM public.users WHERE id = auth.uid()
-  If first_name = '' OR last_name = '':
-    Show full-screen blocking profile completion modal.
-    Collect: first_name, last_name (required), display_name (optional).
-    POST /api/users/profile → C# API validates and updates public.users.
-    After save: dismiss modal. Proceed to org resolution.
+── LOGIN ─────────────────────────────────────────────────────────────────
+
+STEP 1 — CLIENT (Expo Web or Mobile) — /auth/login screen
+  User enters: email address, password.
+
+  Call: const { data, error } = await supabase.auth.signInWithPassword({
+    email: 'user@example.com',
+    password: 'SecurePassword1!',
+  })
+
+  On error:
+    'Invalid login credentials' → Show: "Incorrect email or password. Please try again."
+    Do NOT specify which field is wrong — prevents user enumeration.
+    After 5 failed attempts: show "Forgotten your password?" prompt prominently.
+
+STEP 2 — EMAIL OTP VERIFICATION CHECK
+  GET /api/users/me → check email_verified.
+  If FALSE → Section 1.2a flow.
+  If TRUE  → proceed.
+
+STEP 3 — NAVIGATE TO HOME
+  router.replace('/home')
+  Org context resolved at /home (Section 1.6).
+
+── FORGOT PASSWORD ───────────────────────────────────────────────────────
+
+STEP 1 — CLIENT — /auth/forgot-password screen
+  User enters email address.
+
+  Call: await supabase.auth.resetPasswordForEmail('user@example.com', {
+    redirectTo: Platform.OS === 'web'
+      ? 'https://app.tuitioniq.com/auth/reset-password'
+      : 'tuitioniq://auth/reset-password',
+  })
+
+  Show: "If an account exists for this email, a password reset link has been sent."
+  Always show this message regardless of whether the email exists — prevents
+  user enumeration.
+  60-second cooldown before allowing resend.
+
+STEP 2 — USER CLICKS RESET LINK IN EMAIL
+  Link format: https://app.tuitioniq.com/auth/reset-password?code=<PKCE code>
+  On Expo Web: browser opens the reset-password URL.
+  On Expo Native: deep link intercepted via tuitioniq://auth/reset-password
+
+STEP 3 — CLIENT — /auth/reset-password screen
+  Read `code` from URL params on mount.
+  Strip code from URL immediately:
+    window.history.replaceState({}, '', '/auth/reset-password')
+
+  Exchange code for recovery session:
+    const { error } = await supabase.auth.exchangeCodeForSession(code)
+
+  On success: session established with recovery scope.
+  Show: new password form (new password + confirm password fields).
+
+STEP 4 — CLIENT — Submit new password
+  Call: const { error } = await supabase.auth.updateUser({
+    password: newPassword
+  })
+
+  On success:
+    Show: "Your password has been updated. Please log in with your new password."
+    Call: await supabase.auth.signOut()  // end recovery session
+    router.replace('/auth/login')
+
+  On error (e.g. weak password):
+    Show inline validation error.
 ```
 
 ---
@@ -243,11 +362,11 @@ STEP 1 — TEACHER/ADMIN ACTION (already authenticated)
            https://app.tuitioniq.com/join?token=<token>
 
          ⚠️ This token is a TuitionIQ invite token stored in public.invites.
-            It is NOT a Supabase magic link. These are two separate mechanisms.
+            It is NOT a Supabase auth token or password reset link.
             The invite token accepts the org membership.
-            Authentication is handled separately by Supabase magic link.
+            Authentication (account creation or login) is handled separately.
 
-STEP 2 — INVITEE RECEIVES TOKEN EMAIL
+STEP 2 — INVITEE RECEIVES INVITE EMAIL
   User clicks: https://app.tuitioniq.com/join?token=<token>
 
   Client reads token from URL params immediately on mount.
@@ -259,15 +378,29 @@ STEP 3 — AUTHENTICATION CHECK ON JOIN SCREEN
   Does the user have an active Supabase session?
 
   IF YES (user previously self-registered and is already logged in):
-    Skip magic link. Proceed directly to Step 4.
+    Verify email_verified = TRUE. If not, run Section 1.2a flow first.
+    Skip to Step 4.
 
   IF NO:
-    Show the standard magic link screen, pre-filled with the invite email (read-only field).
-    Run through Path A Steps 1–4 to establish a session.
-    After session established, continue to Step 4.
+    IF the invitee has no existing account (they have not previously registered):
+      Show Sign Up form:
+        - Email field: pre-filled with invite email (read-only).
+        - First name, last name, password, confirm password fields (editable).
+        Call: supabase.auth.signUp({ email, password, options: { data: { first_name, last_name } } })
+        On success: session established. DB trigger creates public.users.
+        Run Section 1.2a OTP verification flow.
+
+    IF the invitee already has an account (they registered independently):
+      Show Login form:
+        - Email field: pre-filled with invite email (read-only).
+        - Password field.
+        Call: supabase.auth.signInWithPassword({ email, password })
+        On success: session established.
+        Run Section 1.2a OTP verification flow if email_verified = FALSE.
+
     The invite token must survive the auth flow — store it in React state or
-    React context before initiating the magic link flow and retrieve it after
-    the session is established.
+    React context before initiating the sign-up or login flow and retrieve it
+    after the session is established and email verified.
 
 STEP 4 — INVITE ACCEPTANCE (C# ASP.NET Core API)
   POST /api/invites/accept
@@ -307,7 +440,7 @@ STEP 1 — CLIENT
 STEP 2 — CLIENT CLEANUP
   Clear organization_id and membership data from app state.
   Clear sessionStorage (web only, if org context was persisted there).
-  Navigate to /login.
+  Navigate to /auth/login.
 
 STEP 3 — BACKEND (automatic)
   C# API: next request with invalidated token returns 401.
@@ -325,7 +458,7 @@ STEP 3 — BACKEND (automatic)
 
 ### 1.6 Post-Login Home Screen — Org Context Resolution
 
-Every successful authentication navigates to `/home` without exception. The home screen resolves org context:
+Every successful authentication (after OTP verification) navigates to `/home` without exception. The home screen resolves org context:
 
 ```
 ON /home MOUNT:
@@ -342,7 +475,7 @@ RESULT: memberships[]
 │  → Show "Welcome to TuitionIQ" screen                        │
 │     Two options:                                             │
 │       [Create your organisation]  →  /org/create            │
-│       [I have a pending invite]   →  direct to /login        │
+│       [I have a pending invite]   →  direct to /auth/login   │
 │                                      (teacher must re-send   │
 │                                       invite or check email) │
 └──────────────────────────────────────────────────────────────┘
@@ -393,10 +526,14 @@ supabase.auth.onAuthStateChange((event, session) => {
     case "SIGNED_OUT":
       setUser(null);
       clearOrgContext();
-      router.replace("/login");
+      router.replace("/auth/login");
       break;
     case "USER_UPDATED":
       setUser(session!.user);
+      break;
+    case "PASSWORD_RECOVERY":
+      // Recovery session active — navigate to reset password form
+      router.replace("/auth/reset-password");
       break;
   }
 });
@@ -409,7 +546,7 @@ Three mitigation layers, all required:
 
 1. **RLS** checks `public.users.is_active = TRUE` — acts as database-level safety control.
 2. **C# API middleware** checks `public.users.is_active` on every request — returns 403 if false.
-3. **Supabase Admin API** — call `admin.auth.signOut(userId, 'global')` + set `ban_duration` to block future magic link issuance.
+3. **Supabase Admin API** — call `admin.auth.signOut(userId, 'global')` + set `ban_duration` to block future logins.
 
 ---
 
@@ -428,12 +565,13 @@ Three mitigation layers, all required:
 
 ### 2.2 Recommended Expiry Durations
 
-| Token                | Recommended | Reason                                                                                                 |
-| -------------------- | ----------- | ------------------------------------------------------------------------------------------------------ |
-| **Access token**     | **1 hour**  | Short blast-radius window if stolen. Stateless JWTs cannot be revoked mid-life — this caps the damage. |
-| **Refresh token**    | **7 days**  | Forces re-authentication weekly. Reasonable for daily-use apps. Low friction with magic links.         |
-| **Invite token**     | **7 days**  | Matches schema. Gives busy teachers and students time to act.                                          |
-| **Magic link token** | **1 hour**  | Supabase default. Single-use. Short window reduces intercepted-email risk.                             |
+| Token                   | Recommended | Reason                                                                                                       |
+| ----------------------- | ----------- | ------------------------------------------------------------------------------------------------------------ |
+| **Access token**        | **1 hour**  | Short blast-radius window if stolen. Stateless JWTs cannot be revoked mid-life — this caps the damage.       |
+| **Refresh token**       | **7 days**  | Forces re-authentication weekly. Reasonable for daily-use apps.                                              |
+| **Invite token**        | **7 days**  | Matches schema. Gives busy teachers and students time to act.                                                |
+| **Password reset link** | **1 hour**  | Supabase default for recovery links. Short window reduces risk if reset email is intercepted.                |
+| **Email OTP code**      | **10 min**  | Applied to the post-login verification OTP. Short window; user is already authenticated and at their device. |
 
 ### 2.3 Are 14-Day Sessions Appropriate? No.
 
@@ -443,7 +581,7 @@ Additional reasons to reject 14-day sessions:
 
 1. **Shared devices are common.** Students and teachers use shared family computers and school devices. Long-lived sessions left open are a realistic attack vector, not a theoretical one.
 2. **Refresh tokens cannot be remotely invalidated without explicit signOut.** The entire 14-day window must be served out before natural expiry if a device is stolen.
-3. **Magic links eliminate login friction.** The primary argument for long sessions is UX convenience. With magic link auth, re-authentication requires only an email address — the friction cost of weekly re-login is near zero.
+3. **Password re-authentication friction is acceptable.** The primary argument for long sessions is UX convenience. With a remembered password and a good UX, weekly re-login is low friction.
 4. **GDPR / UK GDPR exposure.** Handling billing and fee records likely brings this system into scope. Regulators expect proportionate session controls on financial data.
 
 **Decision: 1-hour access tokens + 7-day refresh tokens. Non-negotiable.**
@@ -496,7 +634,7 @@ var orgs = JsonSerializer.Deserialize<List<OrgClaim>>(appMetadata ?? "[]");
 // Use for initial filtering. Re-verify against DB for all write operations.
 ```
 
-**⚠️ JWT claims are baked at token issuance.** If a teacher is removed from an org, their old JWT still contains the old claims until expiry (up to 1 hour). Never use JWT claims as the sole authorization check for write operations. The C# API must always re-query `organization_members` from the database. For immediate role revocation, call `admin.auth.signOut(userId, 'global')`.
+**⚠️ JWT claims are baked at token issuance.** If a teacher is removed from an org, their old JWT still contains the old membership claim until expiry (up to 1 hour). Never use JWT claims as the sole authorization check for write operations. The C# API must always re-query `organization_members` from the database. For immediate role revocation, call `admin.auth.signOut(userId, 'global')`.
 
 ### 2.5 C# ASP.NET Core JWT Validation Setup
 
@@ -566,7 +704,7 @@ The correct approach for this stack is `expo-secure-store` as the token storage 
 
 **The web fallback is a real and documented limitation.** On Expo Web, `expo-secure-store` writes to `localStorage` because the browser has no equivalent of Keychain/Keystore. This means XSS attacks on the Expo Web app could extract tokens.
 
-This is the accepted trade-off for a unified Expo codebase. The mitigation path is a strict Content Security Policy (Section 5.3) plus disciplined prevention of XSS injection points — not a different storage mechanism. This same trade-off is made by the majority of SPA-based auth implementations.
+This is the accepted trade-off for a unified Expo codebase. The mitigation path is a strict Content Security Policy (Section 5.3) plus disciplined prevention of XSS injection points — not a different storage mechanism.
 
 ---
 
@@ -603,7 +741,7 @@ export const supabase = createClient(
       autoRefreshToken: true,
       persistSession: true,
       detectSessionInUrl: Platform.OS === "web",
-      // true on web  → SDK reads auth code from URL on callback
+      // true on web  → SDK reads auth code from URL on password reset callback
       // false on native → no URL bar; deep link handled by app router
     },
   },
@@ -680,7 +818,7 @@ EXPO_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
 EXPO_PUBLIC_SUPABASE_ANON_KEY=<your-anon-key>
 ```
 
-`EXPO_PUBLIC_SUPABASE_ANON_KEY` is safe to expose. It cannot bypass RLS and cannot grant admin access. However, it can be used to invoke `signInWithOtp()` — rate-limit this aggressively (Section 6.4).
+`EXPO_PUBLIC_SUPABASE_ANON_KEY` is safe to expose. It cannot bypass RLS and cannot grant admin access. However, it can be used to invoke `signUp()` and `signInWithPassword()` — rate-limit these aggressively (Section 6.4).
 
 The following must **never** appear in Expo environment variables:
 
@@ -701,8 +839,8 @@ Supabase Auth (GoTrue) maintains:
   auth.sessions       — one row per active device session
   auth.refresh_tokens — one row per issued refresh token (invalidated on rotation)
 
-On magic link click → exchangeCodeForSession(code):
-  1. GoTrue validates the PKCE code (single-use).
+On signInWithPassword({ email, password }):
+  1. GoTrue validates credentials against auth.users (bcrypt comparison internally).
   2. Creates a session row and issues a refresh_token (opaque string).
   3. Derives a JWT (access_token) from user data + hook claims. Not stored server-side.
   4. Returns { access_token, refresh_token, expires_in, user } to client.
@@ -914,7 +1052,7 @@ CREATE POLICY "users_read" ON public.users
     )
   );
 
--- users: self-update only (name, avatar)
+-- users: self-update only (name, avatar, phone)
 CREATE POLICY "users_self_update" ON public.users
   FOR UPDATE USING (id = auth.uid())
   WITH CHECK  (id = auth.uid());
@@ -934,13 +1072,21 @@ CREATE POLICY "users_self_update" ON public.users
    Call window.history.replaceState({}, '', '/join') before any other logic.
    Store in React state only. Do not persist to SecureStore or sessionStorage.
 
-3. EXPO_PUBLIC_ variables are bundled into the app binary.
+3. Password reset PKCE code in URL: strip immediately after exchange.
+   Call window.history.replaceState({}, '', '/auth/reset-password') after
+   supabase.auth.exchangeCodeForSession(code) succeeds.
+
+4. EXPO_PUBLIC_ variables are bundled into the app binary.
    EXPO_PUBLIC_SUPABASE_ANON_KEY: acceptable — constrained by RLS, cannot bypass auth.
    SUPABASE_SERVICE_ROLE_KEY: must never be EXPO_PUBLIC_. If leaked, rotate immediately.
    SUPABASE_JWT_SECRET: must never be EXPO_PUBLIC_.
      Rotation: change in Supabase Dashboard → all existing sessions immediately invalidated
-               → all users must re-authenticate via magic link. This is disruptive but
-               is the only correct response to a leaked JWT secret.
+               → all users must re-authenticate. This is disruptive but is the only correct
+               response to a leaked JWT secret.
+
+5. Never expose the user's plaintext password anywhere in logs, error messages,
+   or debug output. Supabase handles password hashing; the application layer never
+   touches raw credentials.
 ```
 
 ---
@@ -1070,7 +1216,43 @@ C# API pattern for every financial write:
 
 ---
 
-### 5.6 Handling Compromised Accounts
+### 5.6 Password Security Requirements
+
+Passwords are validated client-side before submission and enforced by Supabase's password policy configuration in the dashboard.
+
+```
+Minimum password requirements:
+  - 8 characters minimum length
+  - At least one uppercase letter
+  - At least one lowercase letter
+  - At least one digit
+  - At least one special character (!@#$%^&*...)
+
+Supabase Dashboard → Authentication → Password Settings:
+  - Set minimum password length to 8
+  - Enable "Require uppercase letters"
+  - Enable "Require lowercase letters"
+  - Enable "Require numbers"
+  - Enable "Require special characters"
+
+Client-side enforcement (before calling signUp / updateUser):
+  const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*]).{8,}$/
+  if (!PASSWORD_REGEX.test(password)) {
+    showError("Password must be at least 8 characters and include uppercase, lowercase, a number, and a special character.")
+    return
+  }
+  if (password !== confirmPassword) {
+    showError("Passwords do not match.")
+    return
+  }
+
+Never show the actual password in plain text — use password input fields throughout.
+Provide a show/hide password toggle (eye icon) on all password fields.
+```
+
+---
+
+### 5.7 Handling Compromised Accounts
 
 ```
 Scenario: Teacher's device is stolen.
@@ -1090,8 +1272,15 @@ Immediate response:
 
   3. If fraud is confirmed:
        await supabaseAdmin.Auth.UpdateUserById(userId, new { ban_duration = "87600h" });
-     This blocks future magic link issuance at the auth layer.
+     This blocks future login attempts at the auth layer.
      RLS policies checking is_active = TRUE block data access even with old tokens.
+
+  4. If the teacher's password may have been observed:
+       Admin forces a password reset:
+       await supabaseAdmin.Auth.UpdateUserById(userId, new AdminUserAttributes {
+         Password = GenerateSecureTemporaryPassword()  // forces them to reset on next login
+       });
+       OR: initiate server-side resetPasswordForEmail flow.
 
 Residual window:
   Access tokens issued before revocation remain valid for up to 1 hour (their remaining lifetime).
@@ -1152,8 +1341,10 @@ Configure in Supabase Dashboard → Authentication → Rate Limits before launch
 
 | Endpoint                   | Default           | Recommended       |
 | -------------------------- | ----------------- | ----------------- |
-| OTP send (`signInWithOtp`) | 30/hour per email | 10/hour per email |
 | `signUp`                   | 30/hour per IP    | 10/hour per IP    |
+| `signInWithPassword`       | 30/hour per email | 10/hour per email |
+| `resetPasswordForEmail`    | 30/hour per email | 5/hour per email  |
+| OTP send (`signInWithOtp`) | 30/hour per email | 10/hour per email |
 | Token refresh              | 360/hour          | Keep default      |
 
 Add application-level rate limiting in the C# API for invite dispatch:
@@ -1161,121 +1352,244 @@ Add application-level rate limiting in the C# API for invite dispatch:
 - Max 50 invites dispatched per teacher per hour.
 - Max 200 invites dispatched per organisation per day.
 
-These limits prevent a compromised teacher account from bulk-inviting external attackers or triggering excessive Supabase OTP sends.
+These limits prevent a compromised teacher account from bulk-inviting external attackers.
 
 ---
 
 ## 7. UX Considerations
 
-### 7.1 Profile Completion — Collecting Name After First Magic Link
+### 7.1 Sign Up Screen
 
-Magic link onboarding only collects an email address. After first authentication, `public.users.first_name` and `last_name` are empty strings. Prompt immediately:
+The Sign Up screen collects all required information in a single form. Because `first_name` and `last_name` are passed via `signUp()` metadata and written by the DB trigger, no subsequent profile completion modal is needed for self-registered users.
 
 ```typescript
-// On /home, after org membership query:
-const { data: profile } = await apiClient.get("/api/users/me");
+// On /auth/signup:
+const handleSignUp = async (
+  firstName: string,
+  lastName: string,
+  email: string,
+  password: string,
+  confirmPassword: string,
+) => {
+  // Client-side validation
+  if (password !== confirmPassword) {
+    showError("Passwords do not match.");
+    return;
+  }
+  if (!PASSWORD_REGEX.test(password)) {
+    showError("Password does not meet requirements.");
+    return;
+  }
 
-if (!profile?.first_name || !profile?.last_name) {
-  setShowProfileCompletion(true);
-  // This modal is blocking — it cannot be dismissed without completing the form.
-  // Empty names break UI throughout the application.
-}
+  const { error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      data: { first_name: firstName, last_name: lastName },
+    },
+  });
 
-// On form submit:
-const completeProfile = async (firstName: string, lastName: string) => {
-  await apiClient.patch("/api/users/profile", { firstName, lastName });
-  // C# API validates and writes to public.users
-  setShowProfileCompletion(false);
-  // Proceed to org resolution
+  if (error) {
+    if (error.message.includes("already registered")) {
+      showError("An account with this email already exists. Please log in.");
+      router.push("/auth/login");
+      return;
+    }
+    showError("Registration failed. Please try again.");
+    return;
+  }
+
+  // Session is returned automatically — proceed to OTP verification
+  // (email_verified = FALSE for new users; Section 1.2a applies)
+  await checkAndRunEmailVerification();
 };
-```
 
-Do not allow users to skip profile completion. Empty names appear in teacher lists, student assignment views, audit logs, and payment records.
+// Fields on the Sign Up screen:
+//   First Name       (text input, required)
+//   Last Name        (text input, required)
+//   Email Address    (email input, required)
+//   Password         (password input with show/hide toggle, required)
+//   Confirm Password (password input with show/hide toggle, required)
+//   [Create Account] button
+//   "Already have an account? Log in" link → /auth/login
+```
 
 ---
 
-### 7.2 Silent Login (Auto-Resume Session)
+### 7.2 Login Screen
+
+```typescript
+// On /auth/login:
+const handleLogin = async (email: string, password: string) => {
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+
+  if (error) {
+    incrementFailedAttempts();
+    if (failedAttempts >= 5) {
+      showError("Incorrect email or password. Forgotten your password?", {
+        action: "Reset Password",
+        onPress: () => router.push("/auth/forgot-password"),
+      });
+    } else {
+      showError("Incorrect email or password. Please try again.");
+    }
+    return;
+  }
+
+  // Check email_verified status via GET /api/users/me
+  await checkAndRunEmailVerification();
+};
+
+// Fields on the Login screen:
+//   Email Address    (email input, required)
+//   Password         (password input with show/hide toggle, required)
+//   [Log In] button
+//   "Forgot your password?" link → /auth/forgot-password
+//   "Don't have an account? Sign up" link → /auth/signup
+```
+
+---
+
+### 7.3 Email OTP Verification Screen UX
+
+The email OTP verification screen appears after the first successful login or signup. It is non-dismissable.
+
+```typescript
+// On /auth/verify-email:
+const [resendCooldown, setResendCooldown] = useState(0);
+const [otpSent, setOtpSent] = useState(false);
+
+const sendVerificationOtp = async () => {
+  const { error } = await supabase.auth.signInWithOtp({
+    email: currentUser.email,
+    options: { shouldCreateUser: false },
+  });
+  if (!error) {
+    setOtpSent(true);
+    startCooldown(60); // 60-second cooldown before resend is allowed
+  }
+};
+
+const handleVerifyOtp = async (otpCode: string) => {
+  const { error } = await supabase.auth.verifyOtp({
+    email: currentUser.email,
+    token: otpCode,
+    type: "email",
+  });
+
+  if (error) {
+    showError(
+      "The code you entered is incorrect or has expired. Please try again.",
+    );
+    return;
+  }
+
+  // Notify C# API to mark email as verified
+  await apiClient.patch("/api/users/email-verification");
+  router.replace("/home");
+};
+
+// UI on the verify-email screen:
+//   "Verify your email address"
+//   "We've sent a 6-digit code to {email}."
+//   "Check your spam folder if it doesn't arrive within 2 minutes."
+//   [6-digit code input]
+//   [Verify] button
+//   [Resend code] — disabled for 60 seconds after send, then enabled
+//   "Use a different account" → sign out and go to /auth/login
+```
+
+---
+
+### 7.4 Forgot Password and Reset Password UX
+
+```typescript
+// On /auth/forgot-password:
+const handleForgotPassword = async (email: string) => {
+  await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo:
+      Platform.OS === "web"
+        ? "https://app.tuitioniq.com/auth/reset-password"
+        : "tuitioniq://auth/reset-password",
+  });
+
+  // Always show success message regardless of whether email exists — prevents user enumeration
+  showSuccess(
+    "If an account exists for this email, a reset link has been sent. Check your inbox.",
+  );
+  startCooldown(60);
+};
+
+// On /auth/reset-password (handles PKCE code exchange + new password form):
+const handleResetPassword = async (
+  newPassword: string,
+  confirmPassword: string,
+) => {
+  if (newPassword !== confirmPassword) {
+    showError("Passwords do not match.");
+    return;
+  }
+  if (!PASSWORD_REGEX.test(newPassword)) {
+    showError("Password does not meet requirements.");
+    return;
+  }
+
+  const { error } = await supabase.auth.updateUser({ password: newPassword });
+
+  if (error) {
+    showError(
+      "Failed to update password. Your reset link may have expired. Please request a new one.",
+    );
+    router.replace("/auth/forgot-password");
+    return;
+  }
+
+  showSuccess("Password updated successfully.");
+  await supabase.auth.signOut(); // end recovery session
+  router.replace("/auth/login");
+};
+```
+
+---
+
+### 7.5 Silent Login (Auto-Resume Session)
 
 On app launch, restore session from SecureStore before showing any UI:
 
 ```typescript
 // App.tsx
-const [initialised, setInitialised] = useState(false)
+const [initialised, setInitialised] = useState(false);
 
 useEffect(() => {
-  // Reads from SecureStore cache — synchronous in effect, no network call
   supabase.auth.getSession().then(({ data: { session } }) => {
     if (session) {
-      setUser(session.user)
-      // Navigate to /home — org resolution happens there
-      router.replace('/home')
+      setUser(session.user);
+      // email_verified check happens at /home or guarded routes
+      router.replace("/home");
     } else {
-      router.replace('/login')
+      router.replace("/auth/login");
     }
-    setInitialised(true)
-  })
+    setInitialised(true);
+  });
 
-  const { data: { subscription } } = supabase.auth.onAuthStateChange(
-    (event, session) => {
-      setUser(session?.user ?? null)
-      if (!session) router.replace('/login')
-    }
-  )
+  const {
+    data: { subscription },
+  } = supabase.auth.onAuthStateChange((event, session) => {
+    setUser(session?.user ?? null);
+    if (!session) router.replace("/auth/login");
+    if (event === "PASSWORD_RECOVERY") router.replace("/auth/reset-password");
+  });
 
-  return () => subscription.unsubscribe()
-}, [])
+  return () => subscription.unsubscribe();
+}, []);
 
-if (!initialised) return <SplashScreen />
+if (!initialised) return <SplashScreen />;
 // Show brand splash, not login form — most users will have a valid session
 ```
 
 ---
 
-### 7.3 Magic Link Screen — Managing Email Delivery UX
-
-The main friction with magic links is the wait between sending and receiving. Manage it explicitly:
-
-```typescript
-const [emailSent, setEmailSent] = useState(false);
-const [resendCooldown, setResendCooldown] = useState(0);
-
-const sendMagicLink = async (email: string) => {
-  const { error } = await supabase.auth.signInWithOtp({
-    email,
-    options: {
-      emailRedirectTo:
-        Platform.OS === "web"
-          ? "https://app.tuitioniq.com/auth/callback"
-          : "tuitioniq://auth/callback",
-    },
-  });
-
-  if (error) {
-    showError("Could not send login link. Please try again.");
-    return;
-  }
-
-  setEmailSent(true);
-  startCooldown(60); // Prevent rapid resends. 60-second cooldown.
-};
-
-// UI state when email sent:
-//  "We've sent a login link to {email}"
-//  "Check your spam folder if it doesn't arrive within 2 minutes."
-//  [Open Email App]      — deep link to device mail client
-//  [Use a different email] — resets the form
-//  [Resend link]         — disabled for 60 seconds, then enabled
-
-// Deep link to mail app (Expo):
-import { Linking } from "react-native";
-await Linking.openURL("message://"); // iOS Mail
-// Alternatively: 'googlegmail://'       // Gmail
-// Offer a choice if the user has multiple mail clients installed
-```
-
----
-
-### 7.4 Session Expiration UX
+### 7.6 Session Expiration UX
 
 ```
 Case A: Token refreshes silently (the overwhelming majority of cases)
@@ -1284,9 +1598,9 @@ Case A: Token refreshes silently (the overwhelming majority of cases)
 Case B: Refresh token expired after 7 days of inactivity
   SIGNED_OUT event fires via onAuthStateChange.
   Show non-disruptive toast: "Your session has expired. Please log in again."
-  Navigate to /login with returnPath preserved:
-    router.replace(`/login?returnPath=${encodeURIComponent(currentPath)}`)
-  After successful magic link authentication, navigate back to returnPath.
+  Navigate to /auth/login with returnPath preserved:
+    router.replace(`/auth/login?returnPath=${encodeURIComponent(currentPath)}`)
+  After successful login + OTP verification, navigate back to returnPath.
   Never silently discard where the user was heading.
 
 Case C: Account deactivated mid-session
@@ -1304,9 +1618,9 @@ Case D: Network offline (mobile)
 
 ---
 
-### 7.5 Re-authentication for High-Stakes Operations
+### 7.7 Re-authentication for High-Stakes Operations
 
-Magic link re-authentication is unsuitable for mid-flow confirmation (requires email access + 30–120 second wait). Use a session freshness check instead:
+For high-value operations (e.g., recording large payments), verify session freshness. If the session is stale, require the user to re-enter their password before proceeding.
 
 ```typescript
 const MAX_SESSION_AGE_MS = 30 * 60 * 1000  // 30 minutes
@@ -1324,12 +1638,17 @@ const handleRecordPayment = async (amountPence: number) => {
     const fresh = await isSessionFresh()
     if (!fresh) {
       showReauthModal(
-        'For your security, please verify your identity before proceeding. ' +
-        "We've sent a new login link to your email."
+        'For your security, please confirm your password before proceeding.'
       )
-      // Dispatch signInWithOtp silently. User clicks link. SIGNED_IN fires. Flow resumes.
-      await supabase.auth.signInWithOtp({ email: currentUser.email, options: { emailRedirectTo: ... } })
-      return
+      // Show inline password prompt (not a full navigation):
+      const { error } = await supabase.auth.signInWithPassword({
+        email: currentUser.email,
+        password: promptedPassword,
+      })
+      if (error) {
+        showError("Incorrect password. Payment not recorded.")
+        return
+      }
     }
   }
   await apiClient.post('/api/payments', { ... })
@@ -1338,52 +1657,53 @@ const handleRecordPayment = async (amountPence: number) => {
 
 ---
 
-## 8. Passwordless Authentication — Design Rationale
+## 8. Password Authentication — Design Rationale
 
-### 8.1 Decision: Magic Link Only, for All Users
+### 8.1 Decision: Email + Password with Post-Login OTP Verification
 
-TuitionIQ uses magic link authentication exclusively — for teachers, admins, and students. This is a deliberate architectural decision, not a default. This section explains the reasoning and the honest trade-offs.
+TuitionIQ uses standard email and password authentication — for teachers, admins, and students. After a user's first successful login, a one-time email OTP verification step is required before they can access the application. This is a deliberate architectural decision. This section explains the reasoning and the honest trade-offs.
 
 ---
 
-### 8.2 Why Magic Link for All User Types
+### 8.2 Why Email + Password with Post-Login OTP Verification
 
-**Rationale for unified passwordless auth:**
+**Rationale for password-based auth with email OTP as a verification layer:**
 
-1. **No passwords means no password resets.** Password reset is the most common auth support ticket in SaaS products. Eliminating the entire password credential concept eliminates the support burden entirely.
+1. **Familiarity and trust.** Email and password authentication is the most widely understood and expected credential model. Teachers and students do not need to understand a new authentication paradigm — they enter credentials they already know how to manage.
 
-2. **Student email access is a pre-existing requirement.** The invite flow already sends emails to student addresses (Section 1.4 Path B). If a student cannot receive email, they cannot be onboarded at all — magic link login is consistent with this existing requirement, not a new one.
+2. **Separation of authentication and identity verification.** The password authenticates the user. The OTP step, on first login only, verifies that the email address is genuinely accessible to the registrant. This catches registration with incorrectly typed email addresses early, before any org membership or financial data accumulates.
 
-3. **Simpler codebase.** One auth flow for all users. No password fields, no bcrypt dependency, no password strength validation, no "confirm password" field, no password update endpoint. Fewer UI states, fewer security considerations, fewer bugs.
+3. **Account recovery is always possible.** A user who forgets their password can reset it via the standard `resetPasswordForEmail` flow, which sends a recovery link. There is no dependency on the current state of the email inbox at the moment of login.
 
-4. **Consistent security posture.** Magic links are statistically more secure than user-chosen passwords against credential stuffing and phishing attacks. There is no TuitionIQ credential to steal from breach databases.
+4. **Offline and repeated login.** Once the user has verified their email (email_verified = TRUE), subsequent logins require only email and password — no email inbox access is needed. This is better for users with slow email delivery, shared inboxes, or corporate mail filtering.
 
-5. **Low re-authentication friction.** The primary argument for keeping passwords is "users don't want to use email to log in every week." With magic links, re-authentication is: enter email → open app on phone → tap link. With a good mobile UX (open email app button, Section 7.3), this takes under 30 seconds.
+5. **Password reset flow is well understood.** All users know how to handle "I forgot my password". Support burden for account recovery is low and entirely self-service.
+
+6. **TOTP MFA can be layered on top.** Password + OTP verification is a strong baseline. In v1.1, TOTP MFA can be added for teachers as an optional second factor without architectural changes.
 
 ---
 
 ### 8.3 Honest Limitations and Mitigations
 
-| Limitation               | Honest Assessment                                               | Mitigation                                                                            |
-| ------------------------ | --------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| Email delivery delays    | Corporate mail filtering can delay by 5–10 minutes              | Custom SMTP with warmed domain (SendGrid/Postmark). Monitor delivery rate.            |
-| Shared email addresses   | A teacher using a school `info@` address is a multi-access risk | Enforce personal email at org creation. Validate with a warning in the UI.            |
-| Email account compromise | Attacker with inbox access can log in                           | TOTP MFA as optional second factor for teachers — plan for v1.1                       |
-| Single point of failure  | SMTP provider downtime = no one can log in                      | Reliable provider + backup SMTP configured in Supabase + delivery monitoring + alerts |
-| Expired link confusion   | User clicks a 1-hour-old link and sees an error                 | Clear expiry messaging. Resend button with prominent placement.                       |
-| No offline login         | Requires email access at login time                             | Acceptable — app requires internet connectivity regardless                            |
+| Limitation                        | Honest Assessment                                                      | Mitigation                                                                                          |
+| --------------------------------- | ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Credential stuffing               | If a user reuses a password from a breached site, attackers can log in | Rate limiting on signInWithPassword (10/hour); account lockout after repeated failures; MFA in v1.1 |
+| Weak user-chosen passwords        | Users will pick weak passwords despite requirements                    | Enforce Supabase password policy + client-side regex; zxcvbn strength meter on sign-up form         |
+| Phishing                          | Attackers can trick users into entering credentials on a fake site     | CSP; email sender domain locking; teach users to verify the domain; MFA in v1.1                     |
+| Password reset email interception | If inbox is compromised, attacker can reset password                   | Reset links expire in 1 hour; single-use (PKCE); same risk exists in any email-based system         |
+| Email OTP delivery delay          | Corporate filtering can delay OTP by 5–10 minutes on first login       | Custom SMTP with warmed domain; clear "check spam" messaging; 60-second resend cooldown             |
+| OTP on first login adds friction  | New users must access their email immediately after signing up         | OTP is one-time only; subsequent logins are password-only; resend is prominent                      |
+| No MFA in v1.0                    | Password alone is weaker than password + TOTP                          | Plan TOTP MFA as opt-in for teachers in v1.1; design auth screens with MFA insertion points now     |
 
 ---
 
 ### 8.4 When to Reconsider
 
-Re-evaluate magic link only if:
+Re-evaluate or augment this auth strategy if:
 
-- Measurable, significant user drop-off at the login step is confirmed in analytics and correlated to email delivery times (not just assumed).
-- Enterprise school clients require SAML/SSO integration. Response: add SAML via Supabase Auth's built-in SSO support — not passwords.
-- A specific institution's IT policy permanently blocks transactional email from your sending domain, and the IT department cannot or will not resolve it. This is rare.
-
-The first response to any of these scenarios should be TOTP MFA or SAML SSO — not introducing passwords. Passwords would reintroduce credential stuffing, phishing, breach exposure, and password reset flows that this architecture deliberately eliminates.
+- Measurable, significant account compromise incidents are linked to credential stuffing attacks. Response: add TOTP MFA (Supabase supports it natively) — not change the auth method.
+- Enterprise school clients require SAML/SSO integration. Response: add SAML via Supabase Auth's built-in SSO support — add it alongside password auth for that client, don't replace password auth globally.
+- A specific institution's IT policy blocks transactional email from your sending domain. Response: resolve with the institution's IT department; use a dedicated IP with DKIM/SPF/DMARC configured. Passwordless auth has the same email dependency.
 
 ---
 
@@ -1415,7 +1735,7 @@ For TuitionIQ, this means a removed teacher could attempt financial operations f
 **What to do:**
 
 1. C# API always re-queries `organization_members` before processing writes. JWT claims are display hints only.
-2. For immediate revocation: call `admin.auth.signOut(userId, 'global')` when removing a teacher. The access token window closes within 1 hour. Financial writes in that window are traceable via `audit_logs` and reversible (soft-delete the erroneous payment; the sync trigger recalculates the period).
+2. For immediate revocation: call `admin.auth.signOut(userId, 'global')` when removing a teacher. The access token window closes within 1 hour. Financial writes in that window are traceable via `audit_logs` and reversible.
 
 ---
 
@@ -1423,13 +1743,13 @@ For TuitionIQ, this means a removed teacher could attempt financial operations f
 
 **The mistake:** Soft-deleting `public.users` and assuming the account is locked out.
 
-**The reality:** Supabase Auth has no knowledge of `public.users.deleted_at`. The `auth.users` record is untouched. The user can still receive a magic link and obtain a valid JWT.
+**The reality:** Supabase Auth has no knowledge of `public.users.deleted_at`. The `auth.users` record is untouched. The user can still log in with their password and obtain a valid JWT.
 
 **Three-layer response — all required:**
 
 1. RLS checks `public.users.is_active = TRUE` → database-level safety remains enforced.
 2. C# middleware checks `public.users.is_active` → API writes blocked.
-3. `supabaseAdmin.Auth.UpdateUserById(userId, { ban_duration: "87600h" })` → magic link blocked at the auth layer.
+3. `supabaseAdmin.Auth.UpdateUserById(userId, { ban_duration: "87600h" })` → login blocked at the auth layer.
 
 ---
 
@@ -1437,7 +1757,7 @@ For TuitionIQ, this means a removed teacher could attempt financial operations f
 
 **The mistake:** Leaving the invite token in the URL after reading it.
 
-**The reality:** `/join?token=abc123` appears in browser history, server access logs, error monitoring tools (Sentry captures URLs with tokens automatically), and HTTP referrer headers if the page loads external resources. Anyone who sees the token can attempt to accept the invite.
+**The reality:** `/join?token=abc123` appears in browser history, server access logs, error monitoring tools (Sentry captures URLs with tokens automatically), and HTTP referrer headers if the page loads external resources.
 
 **What to do:**
 
@@ -1448,11 +1768,39 @@ For TuitionIQ, this means a removed teacher could attempt financial operations f
 
 ---
 
-### 9.5 The Multi-Org Student Session Complexity
+### 9.5 The Password Reset Code in URL Problem
+
+**The mistake:** Not stripping the PKCE recovery code from the URL after exchange.
+
+**The reality:** `/auth/reset-password?code=abc123` appears in browser history and server access logs. While the code is single-use and becomes invalid after `exchangeCodeForSession`, it should be cleared immediately as a matter of hygiene.
+
+**What to do:**
+
+1. Call `exchangeCodeForSession(code)` immediately on mount of the reset-password screen.
+2. Immediately after exchange: `window.history.replaceState({}, '', '/auth/reset-password')`.
+3. Store the recovery session state only in memory. Do not persist the code anywhere.
+
+---
+
+### 9.6 The email_verified Bypass Risk
+
+**The mistake:** Only checking `email_verified` on the client side, trusting the client not to skip the OTP screen.
+
+**The reality:** A determined attacker who has valid credentials can navigate directly to protected routes if `email_verified` enforcement only happens in the Expo Router layout guards. The layout guard is a UX safeguard, not a security boundary. All API endpoints that return sensitive data must enforce their own authorization.
+
+**What to do:**
+
+1. The `(app)/_layout.tsx` guarded route group checks `email_verified` on mount and re-checks on focus — this is the UX layer.
+2. The C# API's `UserActiveCheckMiddleware` also checks `email_verified = TRUE` on every request to protected endpoints — this is the security layer. Unverified users receive 403.
+3. The C# API's `PATCH /api/users/email-verification` is the only endpoint that sets `email_verified = TRUE`, and it validates the user's JWT first. The client cannot set `email_verified` directly.
+
+---
+
+### 9.7 The Multi-Org Student Session Complexity
 
 **The mistake:** Hardcoding `organization_id` in session state and assuming it stays consistent.
 
-**The reality:** The schema (v1.5.1) supports a single user being a student in multiple organisations simultaneously. A student with tutoring in two orgs has two separate `students` rows, two separate fee ledgers, two separate teacher assignments. A stale client-side `organization_id` results in the user reading data from the wrong org — or worse, a data access error that looks like a bug.
+**The reality:** The schema (v1.5.1) supports a single user being a student in multiple organisations simultaneously. A student with tutoring in two orgs has two separate `students` rows, two separate fee ledgers, two separate teacher assignments. A stale client-side `organization_id` results in the user reading data from the wrong org.
 
 **What to do:**
 
@@ -1463,82 +1811,76 @@ For TuitionIQ, this means a removed teacher could attempt financial operations f
 
 ---
 
-### 9.6 Magic Link Specific Risks
+### 9.8 Password-Specific Risks
 
 ```
-1. MAGIC LINK INTERCEPTION (inbox compromise)
-   If the user's email account is compromised, the attacker can intercept the link.
-   This is the same risk as password reset email interception — not unique to magic links.
-   Magic links are single-use and expire in 1 hour. The exposure window is tightly bounded.
-   Future mitigation: TOTP MFA as a second factor for teachers — plan this for v1.1.
+1. CREDENTIAL STUFFING
+   Attackers use breach databases to try email/password combinations.
+   Rate-limit signInWithPassword (10/hour per email).
+   Log and alert on > 5 consecutive failures for the same email.
+   Plan TOTP MFA for v1.1.
 
-2. MAGIC LINK SENT TO A MISTYPED ADDRESS
-   If a teacher miskeys a student email, the OTP goes to an unintended address.
-   The recipient cannot accept the TuitionIQ org invite (email match check in C# API).
-   But Supabase will have created an auth.users account for their email (OTP auto-registers).
-   The account has no org membership and creates no security issue — but it is noise.
-   Mitigation: Rate-limit invite dispatch (Section 6.4). Validate email format before sending.
+2. WEAK PASSWORDS
+   Despite strength requirements, some users will use the minimum.
+   Consider a password strength meter (zxcvbn) on the sign-up screen.
+   Supabase enforces the minimum on the server side; client-side UI reinforces it.
 
-3. SMTP AS A SINGLE POINT OF FAILURE
-   If the SMTP provider is degraded, no one can log in.
+3. PHISHING
+   Attackers may clone the TuitionIQ login page.
+   Strict CSP prevents script injection from third-party domains.
+   Configure DKIM, SPF, and DMARC for the sending domain to prevent email spoofing.
+   MFA in v1.1 limits the damage even if credentials are phished.
+
+4. PASSWORD RESET EMAIL AS ATTACK VECTOR
+   If a user's email inbox is compromised, an attacker can request a reset.
+   Reset links expire in 1 hour (Supabase default). Single-use PKCE code.
+   This is an inherent risk of any email-based recovery system.
+
+5. SMTP AS A SINGLE POINT OF FAILURE (for OTP verification and password reset)
+   If the SMTP provider is degraded, new users cannot complete OTP verification
+   and users who forgot their password cannot reset it.
    Mitigation:
-     - Use a tier-1 transactional email provider (Postmark is recommended for reliability).
+     - Use a tier-1 transactional email provider (Postmark is recommended).
      - Configure a fallback SMTP in Supabase.
-     - Monitor email delivery rates with alerting (delivery rate drop > 5% triggers alert).
+     - Monitor email delivery rates with alerting.
      - Document an emergency contact procedure for SMTP outages.
-
-4. LINK OPENED ON AN UNEXPECTED DEVICE
-   User requests magic link on laptop, opens email on phone, clicks link on phone.
-   The session is created on the phone. This is correct behaviour — PKCE does not
-   bind the session to the requesting device. The laptop tab awaits a session that
-   never arrives on that device.
-   The user simply sends a new magic link on the intended device. No security issue.
-   The UX implication: the login screen should not indicate "waiting for you to click
-   the link" in a way that confuses users who clicked on the wrong device.
 ```
 
 ---
 
-### 9.7 Trade-offs You May Regret Later
+### 9.9 Trade-offs You May Regret Later
 
 ```
 1. Supabase Auth vendor lock-in:
    All user identities live in auth.users, managed by Supabase.
-   Migrating to another auth provider means:
+   Passwords are hashed and stored by Supabase; you cannot directly migrate them.
+   Migrating to another auth provider requires:
      - Exporting user emails from Supabase
-     - Re-inviting users to create accounts on the new provider
+     - Requiring all users to reset their passwords on the new system
      - Updating auth_user_id in public.users
-   This is painful but survivable. Accept it as a known trade-off for
-   dramatically faster initial build time.
+   This is painful. Accept it as a known trade-off for significantly faster initial build.
 
 2. expo-secure-store web fallback to localStorage:
-   Tokens in localStorage are accessible to JavaScript, creating XSS risk.
-   This is not a hidden limitation — it is documented Expo behaviour.
-   The mitigation is strict CSP (Section 5.3) and XSS discipline, not a
-   different storage mechanism. Do not attempt to layer SSR cookie management
-   onto this architecture — it would require separate server infrastructure
-   that duplicates what the C# API already provides, for no net security gain
-   given that CSP already protects against the primary XSS token-theft vector.
+   See Section 3.2. The mitigation is strict CSP and XSS discipline. Do not attempt
+   to add SSR cookie management — it would require separate infrastructure that duplicates
+   what the C# API already provides.
 
-3. Magic link as the only auth method:
-   If a user loses access to their email account, they cannot log in.
-   This is the deliberate trade-off for a passwordless system.
-   Mitigation: Document an account recovery process:
-     "Contact your org admin, who submits a verified identity request to TuitionIQ
-      support. Support updates users.email via the Supabase Admin API after identity
-      is confirmed."
-   This process must exist and be documented before launch.
-
-4. JWT claims staleness:
-   See Section 9.2. A 1-hour exposure window for stale role claims is inherent to
-   stateless JWTs — not a Supabase-specific flaw. Architect around it from day one:
-   claims are display hints; the database is the authorization source of truth.
-
-5. No MFA in v1.0:
-   Supabase supports TOTP MFA alongside magic link. For teachers managing fee records,
+3. No MFA in v1.0:
+   Supabase supports TOTP MFA alongside password auth. For teachers managing fee records,
    MFA should be an opt-in option. Retrofitting MFA touches every auth screen.
    Design the auth flow with MFA insertion points now. Ship it in v1.1.
    This is the most likely security regret at scale.
+
+4. JWT claims staleness:
+   See Section 9.2. Inherent to stateless JWTs — not a Supabase-specific flaw.
+   Architect around it from day one: claims are display hints; the database is the
+   authorization source of truth.
+
+5. email_verified = FALSE for all new users:
+   All new users must complete OTP verification before accessing the app.
+   For a class of 30 students invited at once, this adds one login step for every student.
+   The UX impact is real. Communicate the step clearly in the invite email copy:
+   "After creating your account, you'll receive a short verification code by email."
 ```
 
 ---
@@ -1548,6 +1890,8 @@ For TuitionIQ, this means a removed teacher could attempt financial operations f
 ### Database
 
 - [ ] `after_auth_user_created` trigger created and tested. Verified idempotent (`ON CONFLICT DO NOTHING`).
+- [ ] `email_verified BOOLEAN NOT NULL DEFAULT FALSE` column added to `public.users`.
+- [ ] Trigger sets `email_verified = FALSE` for every new user.
 - [ ] RLS enabled on all public tables, including any tables added after initial setup.
 - [ ] RLS policies written and tested for every table (reference Section 5.1 as minimum set).
 - [ ] `public.get_user_org_ids()` helper function created (`STABLE SECURITY DEFINER`).
@@ -1557,15 +1901,16 @@ For TuitionIQ, this means a removed teacher could attempt financial operations f
 
 ### Supabase Auth Configuration (Dashboard)
 
-- [ ] Magic link (OTP) enabled.
-- [ ] Email/password authentication **disabled**. Verified that no password sign-in endpoint is accessible.
+- [ ] Email/password (signUp + signInWithPassword) enabled.
+- [ ] Email OTP (`signInWithOtp` with `shouldCreateUser: false`) enabled — used for post-login verification only.
+- [ ] Password policy configured: min 8 characters, uppercase, lowercase, digit, special character.
 - [ ] Custom SMTP configured (SendGrid, Postmark, or equivalent). Supabase default email disabled.
-- [ ] All email templates customised with TuitionIQ branding (magic link, invite notification).
-- [ ] Rate limits set: 10 OTP sends/hour per email, 10 signUps/hour per IP.
+- [ ] All email templates customised with TuitionIQ branding: signup confirmation (if used), password reset, OTP verification, invite notification.
+- [ ] Rate limits set: 10 signUps/hour per IP, 10 signInWithPassword/hour per email, 5 resetPasswordForEmail/hour per email, 10 OTP sends/hour per email.
 - [ ] JWT expiry set to 3600 seconds (1 hour).
 - [ ] Refresh token rotation enabled (default — verify it is on).
 - [ ] Refresh token reuse detection enabled.
-- [ ] Allowed redirect URLs: `https://app.tuitioniq.com/auth/callback` and `tuitioniq://auth/callback`.
+- [ ] Allowed redirect URLs: `https://app.tuitioniq.com/auth/reset-password` and `tuitioniq://auth/reset-password`.
 - [ ] No wildcard (`*`) in allowed redirect URLs.
 - [ ] `SUPABASE_SERVICE_ROLE_KEY` confirmed absent from all Expo environment variables.
 
@@ -1578,25 +1923,35 @@ For TuitionIQ, this means a removed teacher could attempt financial operations f
 - [ ] `SUPABASE_JWT_SECRET` and `SUPABASE_SERVICE_ROLE_KEY` confirmed absent from `.env` (Expo).
 - [ ] `detectSessionInUrl: Platform.OS === 'web'` configured.
 - [ ] `AppState` listener for `startAutoRefresh` / `stopAutoRefresh` implemented (Section 4.3).
-- [ ] `supabase.auth.onAuthStateChange` subscribed at App root. Unsubscribed on cleanup.
+- [ ] `supabase.auth.onAuthStateChange` subscribed at App root. Unsubscribed on cleanup. `PASSWORD_RECOVERY` event handled.
 - [ ] Deep link scheme configured: `"scheme": "tuitioniq"` in `app.json`.
-- [ ] Magic link redirect URL is `tuitioniq://auth/callback` for native builds.
-- [ ] Magic link redirect URL is `https://app.tuitioniq.com/auth/callback` for web.
-- [ ] PKCE code stripped from URL immediately after `exchangeCodeForSession`.
+- [ ] Password reset redirect URL is `tuitioniq://auth/reset-password` for native builds.
+- [ ] Password reset redirect URL is `https://app.tuitioniq.com/auth/reset-password` for web.
+- [ ] PKCE recovery code stripped from URL immediately after `exchangeCodeForSession` on reset-password screen.
 - [ ] Invite token stripped from URL immediately after reading (Section 9.4).
-- [ ] Profile completion screen blocks navigation until `first_name` and `last_name` are set.
+- [ ] Sign Up form: collects first name, last name, email, password, confirm password. Passes `data: { first_name, last_name }` to `signUp()`.
+- [ ] Password strength requirements enforced client-side before `signUp` and `updateUser` calls.
+- [ ] Show/hide password toggle present on all password input fields.
+- [ ] Login form: email + password. "Forgot password?" link prominent.
+- [ ] After 5 failed logins: show "Forgotten your password?" call-to-action prominently.
+- [ ] Forgot password screen: does not confirm whether email exists (prevents user enumeration).
+- [ ] Reset password screen: exchanges PKCE code, strips from URL, shows new password form.
+- [ ] Email OTP verification screen: non-dismissable, 60-second resend cooldown, "check spam" messaging.
+- [ ] `email_verified` checked after every `signInWithPassword` and `signUp` call. OTP flow triggered if FALSE.
+- [ ] `(app)` route group layout guard: redirects to `/auth/verify-email` if `email_verified = FALSE`.
 - [ ] Post-login always navigates to `/home`. Auth callback never routes directly to dashboard.
 - [ ] Org selector shown when user has 0 memberships (welcome screen) or multiple memberships.
-- [ ] Session expiry toast + returnPath redirect implemented (Section 7.4).
+- [ ] Session expiry toast + returnPath redirect implemented (Section 7.6).
 - [ ] "Sign out everywhere" button in user profile settings.
 - [ ] CSP headers configured on Expo Web hosting (Section 5.3).
-- [ ] Resend magic link: 60-second cooldown. "Open Email App" deep link on send confirmation screen.
 
 ### C# ASP.NET Core API
 
 - [ ] `AddJwtBearer` configured with `SUPABASE_JWT_SECRET`, audience `'authenticated'`, correct issuer URL.
 - [ ] `[Authorize]` attribute on all authenticated controllers and endpoints.
 - [ ] Middleware extracts `sub` claim as user ID on every authenticated request.
+- [ ] `UserActiveCheckMiddleware` checks `public.users.is_active = TRUE` and `email_verified = TRUE` on every request to protected endpoints. Returns 403 if either is false (with distinct error codes for suspension vs. unverified).
+- [ ] `PATCH /api/users/email-verification` endpoint: validates JWT, sets `email_verified = TRUE`, inserts `audit_log`.
 - [ ] All financial write endpoints re-query `organization_members` to verify caller's org membership.
 - [ ] `audit_logs` INSERT included in the same transaction as every financial write.
 - [ ] Account suspension endpoint calls Supabase Admin API + sets `public.users.is_active = FALSE`.
@@ -1604,12 +1959,14 @@ For TuitionIQ, this means a removed teacher could attempt financial operations f
 - [ ] Admin endpoint for global session revocation (`POST /api/admin/users/{id}/revoke-sessions`).
 - [ ] Invite dispatch rate limiting: 50/hour per teacher, 200/day per org.
 - [ ] `SUPABASE_SERVICE_ROLE_KEY` and `SUPABASE_JWT_SECRET` loaded from environment / secrets manager only.
-- [ ] C# middleware checks `public.users.is_active = TRUE` on every request. Returns 403 if false.
 
 ### Invite Flow
 
 - [ ] Email lookup against `public.users` implemented at invite dispatch (Section 1.4 Step 1).
 - [ ] Immediate account linking flow tested (student already self-registered before invite).
+- [ ] Invite join screen: shows Sign Up form (email pre-filled, read-only) if user has no account; shows Login form if account exists.
+- [ ] OTP verification flow runs after sign-up or login on the join screen (if email_verified = FALSE).
+- [ ] Invite token survives the sign-up / login flow (stored in React state / context).
 - [ ] Email match validation in C# invite acceptance endpoint (Section 1.4 Step 4).
 - [ ] Token expiry (7 days) validated server-side on acceptance.
 - [ ] Revoked and expired tokens return a clear user-facing error message — not a 500.
@@ -1620,13 +1977,16 @@ For TuitionIQ, this means a removed teacher could attempt financial operations f
 - [ ] **Penetration test:** User from Org A cannot read or write any data belonging to Org B.
 - [ ] **Penetration test:** Student cannot read other students' fee records or payment history.
 - [ ] **Penetration test:** Removed teacher cannot access the org after global session revocation.
-- [ ] **Penetration test:** Expired magic link token returns 400, not a valid session.
+- [ ] **Penetration test:** Expired password reset link returns 400, not a valid session.
 - [ ] **Penetration test:** Invite token issued to email A cannot be accepted by a user with email B.
-- [ ] Soft-delete + auth ban flow tested end-to-end. Confirmed that banned user cannot receive new magic link.
+- [ ] **Penetration test:** Unverified user (email_verified = FALSE) cannot access protected C# API endpoints.
+- [ ] **Penetration test:** Client cannot set email_verified = TRUE directly (must go through PATCH /api/users/email-verification with valid JWT).
+- [ ] Soft-delete + auth ban flow tested end-to-end. Confirmed that banned user cannot log in.
 - [ ] `SUPABASE_SERVICE_ROLE_KEY` confirmed absent from production Expo Web bundle (inspect compiled assets).
-- [ ] Email delivery monitoring configured with alert on delivery rate degradation.
+- [ ] Email delivery monitoring configured with alert on delivery rate degradation (OTP and password reset emails).
+- [ ] Brute-force protection tested: after 10 attempts, rate limiter blocks further `signInWithPassword` calls for that email.
 
 ---
 
-_End of TuitionIQ Authentication System — v1.3.0_
+_End of TuitionIQ Authentication System — v2.0.0_
 _Stack: React Expo (Web + Mobile) · C# ASP.NET Core · Supabase Auth_

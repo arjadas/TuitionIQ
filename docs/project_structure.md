@@ -4,7 +4,7 @@
 
 **Stack:** React Expo (Web + Mobile) · C# ASP.NET Core · Supabase (PostgreSQL + Auth)
 **Pattern:** Feature-based Clean Architecture (backend) · Feature-based modular screens (frontend)
-**Version:** v1.1.1
+**Version:** v2.0.0
 
 ---
 
@@ -49,7 +49,7 @@ tuitioniq/                                    ← repository root
 │   ├── database_schema.md                    ← canonical schema spec
 │   ├── project_structure.md                  ← this document
 │   └── adr/                                  ← Architecture Decision Records
-│       ├── 001-passwordless-auth-only.md
+│       ├── 001-email-password-auth.md
 │       ├── 002-frontend-never-writes-to-db.md
 │       └── 003-openapi-type-generation.md
 │
@@ -116,7 +116,8 @@ TuitionIQ.Api/
 │   │
 │   ├── Users/
 │   │   └── UsersController.cs                ← PATCH /api/users/profile
-│   │                                            GET  /api/users/me
+│   │                                            PATCH /api/users/email-verification
+│   │                                            GET   /api/users/me
 │   │
 │   ├── Organizations/
 │   │   └── OrganizationsController.cs        ← POST /api/organizations
@@ -145,7 +146,8 @@ TuitionIQ.Api/
 │                                                POST /api/admin/users/{id}/suspend
 │
 ├── Middleware/
-│   ├── UserActiveCheckMiddleware.cs          ← checks public.users.is_active on every request → 403
+│   ├── UserActiveCheckMiddleware.cs          ← checks public.users.is_active AND email_verified
+│   │                                            on every protected request → 403 if either false
 │   ├── RequestLoggingMiddleware.cs           ← structured logging; strips Authorization header
 │   └── OriginValidationMiddleware.cs         ← CSRF origin check (see authentication.md §5.4)
 │
@@ -174,7 +176,9 @@ TuitionIQ.Application/
 │   ├── Interfaces/
 │   │   ├── ICurrentUserService.cs            ← resolves user ID + org context from JWT claims
 │   │   ├── IDateTimeProvider.cs              ← testable clock abstraction
-│   │   ├── IEmailService.cs                  ← sends magic links, invite emails, notifications
+│   │   ├── IEmailService.cs                  ← sends invite emails and notifications via SMTP;
+│   │   │                                        does NOT send OTP codes or password reset emails
+│   │   │                                        (those are dispatched by Supabase Auth directly)
 │   │   └── IAuditLogService.cs               ← writes audit_logs rows within transactions
 │   ├── Behaviours/
 │   │   └── ValidationBehaviour.cs            ← MediatR pipeline: auto-validate request DTOs
@@ -196,11 +200,17 @@ TuitionIQ.Application/
 │   │
 │   ├── Users/
 │   │   ├── Commands/
-│   │   │   └── UpdateProfileCommand.cs       ← validates + writes first_name, last_name, phone
+│   │   │   ├── UpdateProfileCommand.cs       ← validates + writes first_name, last_name, phone
+│   │   │   └── VerifyEmailCommand.cs         ← sets public.users.email_verified = TRUE;
+│   │   │                                        writes audit_log (action='user.email_verified');
+│   │   │                                        idempotent — returns 200 if already verified;
+│   │   │                                        called after client successfully completes
+│   │   │                                        supabase.auth.verifyOtp() on the frontend
 │   │   ├── Queries/
 │   │   │   └── GetUserProfileQuery.cs
 │   │   └── Dtos/
-│   │       ├── UserProfileDto.cs             ← { id, email, firstName, lastName, phone, avatarUrl }
+│   │       ├── UserProfileDto.cs             ← { id, email, firstName, lastName, phone,
+│   │       │                                      avatarUrl, emailVerified }
 │   │       └── UpdateProfileRequest.cs       ← { firstName, lastName, phone? }
 │   │
 │   ├── Organizations/
@@ -265,7 +275,8 @@ TuitionIQ.Domain/
 ├── TuitionIQ.Domain.csproj
 │
 ├── Entities/
-│   ├── User.cs                               ← maps to public.users; no password fields
+│   ├── User.cs                               ← maps to public.users; no password fields;
+│   │                                            includes EmailVerified bool property
 │   ├── Organization.cs
 │   ├── OrganizationMember.cs
 │   ├── Student.cs                            ← includes AccountStatus enum, nullable UserId
@@ -292,7 +303,9 @@ TuitionIQ.Domain/
 └── Rules/
     ├── StudentOwnershipRule.cs               ← "teacher must be linked to student via teacher_students"
     ├── InviteExpiryRule.cs                   ← "expires_at > NOW() and status = Pending"
-    └── FeeActiveRule.cs                      ← "only one is_active fee config per student"
+    ├── FeeActiveRule.cs                      ← "only one is_active fee config per student"
+    └── EmailVerificationRule.cs              ← "email_verified must be TRUE before accessing
+                                                 protected resources; enforced by middleware"
 ```
 
 ---
@@ -308,9 +321,10 @@ TuitionIQ.Infrastructure/
 │   ├── Migrations/                           ← EF-generated migration files
 │   │   ├── 20250101000000_InitialSchema.cs
 │   │   ├── 20250201000000_AddCompositeKeys.cs
-│   │   └── ...
+│   │   ├── 20250301000000_AddEmailVerified.cs  ← adds email_verified BOOLEAN NOT NULL DEFAULT FALSE
+│   │   └── ...                                  to public.users; adds idx_users_email_verified
 │   └── Configurations/                       ← IEntityTypeConfiguration<T> per entity
-│       ├── UserConfiguration.cs
+│       ├── UserConfiguration.cs              ← maps EmailVerified bool; no password column
 │       ├── OrganizationConfiguration.cs
 │       ├── OrganizationMemberConfiguration.cs
 │       ├── StudentConfiguration.cs
@@ -322,14 +336,17 @@ TuitionIQ.Infrastructure/
 │       └── AuditLogConfiguration.cs          ← SaveChanges override: throws on Modified/Deleted
 │
 ├── Auth/
-│   ├── SupabaseAdminClient.cs                ← wraps Supabase Admin API (sign-out, ban)
+│   ├── SupabaseAdminClient.cs                ← wraps Supabase Admin API (sign-out, ban,
+│   │                                            updateUserById for account-level operations)
 │   ├── CurrentUserService.cs                 ← implements ICurrentUserService; reads 'sub' claim
 │   └── JwtClaimsExtensions.cs               ← parses app_metadata.orgs from JWT
 │
 ├── Email/
 │   ├── SmtpEmailService.cs                   ← implements IEmailService; sends via configured SMTP
 │   └── Templates/
-│       ├── InviteEmail.cs                    ← invite token email template
+│       ├── InviteEmail.cs                    ← invite token email; includes sign-up link
+│       │                                        (email pre-filled) for new users or login
+│       │                                        link for existing users
 │       └── NotificationEmail.cs              ← "you've been added to {org}" email
 │
 └── DependencyInjection.cs                    ← registers all Infrastructure services
@@ -348,8 +365,12 @@ tests/
 │   │   │   └── WaivePeriodCommandTests.cs
 │   │   ├── Invites/
 │   │   │   └── AcceptInviteCommandTests.cs   ← email match, expiry, status machine
-│   │   └── Students/
-│   │       └── CreateStudentCommandTests.cs
+│   │   ├── Students/
+│   │   │   └── CreateStudentCommandTests.cs
+│   │   └── Users/
+│   │       └── VerifyEmailCommandTests.cs    ← idempotency when already verified;
+│   │                                            audit_log written; 403 returned by
+│   │                                            middleware when email_verified = FALSE
 │   └── Domain/
 │       └── MoneyTests.cs
 │
@@ -357,7 +378,10 @@ tests/
 │   ├── Fixtures/
 │   │   └── WebApplicationFactory.cs          ← spins up API against real local Supabase
 │   ├── Auth/
-│   │   └── JwtValidationTests.cs
+│   │   ├── JwtValidationTests.cs
+│   │   └── EmailVerificationMiddlewareTests.cs  ← verifies unverified users (email_verified=FALSE)
+│   │                                              receive 403 on all protected endpoints;
+│   │                                              verifies verified users pass through normally
 │   └── Billing/
 │       └── PaymentFlowTests.cs               ← full end-to-end: create student → fee → payment
 │
@@ -383,18 +407,47 @@ frontend/
 ├── .env.example
 │
 ├── app/                                      ← Expo Router: file = route
-│   ├── _layout.tsx                           ← Root layout: auth listener, splash, providers
-│   ├── index.tsx                             ← Redirects to /home or /login based on session
+│   ├── _layout.tsx                           ← Root layout: auth listener, splash, providers;
+│   │                                            subscribes to onAuthStateChange; handles
+│   │                                            PASSWORD_RECOVERY event → /auth/reset-password
+│   ├── index.tsx                             ← Redirects to /home or /auth/login based on session
 │   │
 │   ├── (auth)/                               ← Unauthenticated route group
-│   │   ├── _layout.tsx                       ← No auth required; redirect away if session exists
-│   │   ├── login.tsx                         ← Magic link email screen
-│   │   └── callback.tsx                      ← exchangeCodeForSession handler (web + deep link)
+│   │   ├── _layout.tsx                       ← No auth required; redirects to /home if session
+│   │   │                                        exists AND email_verified = TRUE
+│   │   ├── login.tsx                         ← Email + password login screen
+│   │   ├── signup.tsx                        ← Registration screen: first name, last name,
+│   │   │                                        email, password, confirm password
+│   │   ├── forgot-password.tsx               ← Email input; triggers resetPasswordForEmail();
+│   │   │                                        always shows neutral success message to prevent
+│   │   │                                        user enumeration; 60-second resend cooldown
+│   │   └── reset-password.tsx                ← New password + confirm password form; reads PKCE
+│   │                                            code from URL, strips it immediately via
+│   │                                            window.history.replaceState, exchanges via
+│   │                                            exchangeCodeForSession(), calls updateUser()
 │   │
-│   ├── join.tsx                              ← Invite token acceptance screen
+│   ├── (verify)/                             ← Post-login, pre-verification route group
+│   │   ├── _layout.tsx                       ← Requires authenticated session; redirects to
+│   │   │                                        /home if email_verified = TRUE; non-bypassable
+│   │   └── verify-email.tsx                  ← 6-digit OTP entry screen; dispatches OTP via
+│   │                                            signInWithOtp({ shouldCreateUser: false });
+│   │                                            calls verifyOtp() then PATCH
+│   │                                            /api/users/email-verification on success;
+│   │                                            60-second resend cooldown; non-dismissable
 │   │
-│   └── (app)/                                ← Authenticated route group
-│       ├── _layout.tsx                       ← Requires session; AppState refresh handler
+│   ├── join.tsx                              ← Invite token acceptance screen; reads token from
+│   │                                            URL and strips it immediately; shows SignUpForm
+│   │                                            (email pre-filled, read-only) if user has no
+│   │                                            account, or LoginForm if account exists; runs
+│   │                                            OTP verification if email_verified = FALSE;
+│   │                                            then POSTs token to /api/invites/accept
+│   │
+│   └── (app)/                                ← Authenticated + verified route group
+│       ├── _layout.tsx                       ← Requires session AND email_verified = TRUE;
+│       │                                        redirects to /auth/login if no session;
+│       │                                        redirects to /verify/verify-email if session
+│       │                                        exists but email_verified = FALSE;
+│       │                                        AppState refresh handler
 │       ├── home.tsx                          ← Org resolution: 0 orgs / 1 org / multi-org
 │       │
 │       ├── (teacher)/                        ← Teacher + Admin + Owner views
@@ -415,7 +468,8 @@ frontend/
 │       │   │
 │       │   └── settings/
 │       │       ├── index.tsx                 ← Org settings
-│       │       └── profile.tsx               ← User profile + "sign out everywhere"
+│       │       └── profile.tsx               ← User profile; "sign out everywhere" button;
+│       │                                        "Change password" → /auth/forgot-password
 │       │
 │       └── (student)/                        ← Student portal views
 │           ├── _layout.tsx                   ← Role guard for student role
@@ -427,22 +481,43 @@ frontend/
 │   │   │
 │   │   ├── auth/
 │   │   │   ├── components/
-│   │   │   │   ├── MagicLinkForm.tsx         ← email field + send button + 60s cooldown
-│   │   │   │   └── OpenEmailAppButton.tsx    ← Linking.openURL to mail client
+│   │   │   │   ├── LoginForm.tsx             ← email + password fields; show/hide password
+│   │   │   │   │                                toggle; "Forgot your password?" link;
+│   │   │   │   │                                shows prominent reset prompt after 5 failures
+│   │   │   │   ├── SignUpForm.tsx            ← first name, last name, email, password, confirm
+│   │   │   │   │                                password; PasswordStrengthMeter; show/hide
+│   │   │   │   │                                toggles; client-side PASSWORD_REGEX validation
+│   │   │   │   ├── ForgotPasswordForm.tsx    ← email input only; 60-second resend cooldown;
+│   │   │   │   │                                always shows neutral success copy
+│   │   │   │   ├── ResetPasswordForm.tsx     ← new password + confirm password; show/hide
+│   │   │   │   │                                toggles; PasswordStrengthMeter; calls
+│   │   │   │   │                                updateUser({ password }) then signOut()
+│   │   │   │   └── EmailOtpVerificationForm.tsx  ← 6-digit code input; resend button with
+│   │   │   │                                        60-second cooldown; "check spam" guidance;
+│   │   │   │                                        "Use a different account" link; non-dismissable
 │   │   │   ├── hooks/
-│   │   │   │   ├── useAuthSession.ts         ← getSession() + onAuthStateChange subscription
-│   │   │   │   └── useSessionFreshness.ts    ← isSessionFresh() for high-value ops (auth.md §7.5)
+│   │   │   │   ├── useAuthSession.ts         ← getSession() + onAuthStateChange subscription;
+│   │   │   │   │                                handles SIGNED_IN, SIGNED_OUT, TOKEN_REFRESHED,
+│   │   │   │   │                                USER_UPDATED, PASSWORD_RECOVERY events
+│   │   │   │   ├── useSessionFreshness.ts    ← isSessionFresh() for high-value ops (auth.md §7.7)
+│   │   │   │   └── useEmailVerification.ts   ← reads emailVerified from /api/users/me;
+│   │   │   │                                    dispatches OTP via signInWithOtp();
+│   │   │   │                                    calls verifyOtp(); calls PATCH
+│   │   │   │                                    /api/users/email-verification on success
 │   │   │   └── services/
-│   │   │       └── authService.ts            ← signInWithOtp, exchangeCodeForSession, signOut
+│   │   │       └── authService.ts            ← signUp, signInWithPassword, signOut,
+│   │   │                                        resetPasswordForEmail, updatePassword,
+│   │   │                                        sendVerificationOtp, verifyEmailOtp
+│   │   │                                        — no raw passwords stored or logged
 │   │   │
 │   │   ├── users/
 │   │   │   ├── components/
-│   │   │   │   ├── ProfileCompletionModal.tsx  ← blocking modal; first_name + last_name required
 │   │   │   │   └── AvatarUpload.tsx
 │   │   │   ├── hooks/
 │   │   │   │   └── useUserProfile.ts
 │   │   │   └── services/
 │   │   │       └── usersApiClient.ts         ← PATCH /api/users/profile
+│   │   │                                        PATCH /api/users/email-verification
 │   │   │
 │   │   ├── organizations/
 │   │   │   ├── components/
@@ -468,9 +543,18 @@ frontend/
 │   │   │
 │   │   ├── invites/
 │   │   │   ├── components/
-│   │   │   │   └── InviteAcceptanceScreen.tsx  ← reads token; handles auth + acceptance flow
+│   │   │   │   ├── InviteAcceptanceScreen.tsx  ← reads invite token; shows SignUpForm (email
+│   │   │   │   │                                  pre-filled, read-only) when user has no account;
+│   │   │   │   │                                  shows LoginForm when account exists; runs OTP
+│   │   │   │   │                                  verification if email_verified = FALSE; then
+│   │   │   │   │                                  POSTs token to /api/invites/accept
+│   │   │   │   └── InviteAuthGate.tsx          ← determines SignUpForm vs LoginForm by checking
+│   │   │   │                                      whether a Supabase session already exists
 │   │   │   ├── hooks/
-│   │   │   │   └── useInviteFlow.ts          ← manages token in React state through auth flow
+│   │   │   │   └── useInviteFlow.ts          ← manages token in React state through the
+│   │   │   │                                    sign-up or login flow and OTP verification;
+│   │   │   │                                    token is never stored in URL, localStorage,
+│   │   │   │                                    or SecureStore — React state only
 │   │   │   └── services/
 │   │   │       └── invitesApiClient.ts       ← POST /api/invites, POST /api/invites/accept
 │   │   │
@@ -492,6 +576,10 @@ frontend/
 │   │   │   ├── ui/
 │   │   │   │   ├── Button.tsx
 │   │   │   │   ├── TextInput.tsx
+│   │   │   │   ├── PasswordInput.tsx         ← password field with show/hide eye-icon toggle;
+│   │   │   │   │                                used on login, signup, and reset-password screens
+│   │   │   │   ├── PasswordStrengthMeter.tsx ← visual strength indicator driven by passwordValidation
+│   │   │   │   │                                util; shown on signup and reset-password screens
 │   │   │   │   ├── Badge.tsx
 │   │   │   │   ├── Card.tsx
 │   │   │   │   ├── Modal.tsx
@@ -509,14 +597,20 @@ frontend/
 │   │   └── utils/
 │   │       ├── formatCurrency.ts             ← formats whole-integer BDT/other amounts
 │   │       ├── formatDate.ts
-│   │       └── stripUrlParam.ts              ← window.history.replaceState wrapper
+│   │       ├── passwordValidation.ts         ← exports PASSWORD_REGEX and validatePassword(pwd);
+│   │       │                                    shared by SignUpForm and ResetPasswordForm;
+│   │       │                                    enforces min 8 chars, uppercase, lowercase,
+│   │       │                                    digit, special character requirements
+│   │       └── stripUrlParam.ts              ← window.history.replaceState wrapper; used to
+│   │                                            strip PKCE code from reset-password URL and
+│   │                                            invite token from join URL immediately on mount
 │   │
 │   ├── lib/
 │   │   ├── supabase.ts                       ← createClient with ExpoSecureStoreAdapter
 │   │   └── apiClient.ts                      ← configured Axios instance; attaches JWT
 │   │
 │   └── store/
-│       ├── authStore.ts                      ← Zustand: session, user
+│       ├── authStore.ts                      ← Zustand: session, user, emailVerified
 │       ├── orgStore.ts                       ← Zustand: selectedOrgId, memberships
 │       └── index.ts                          ← re-exports all stores
 │
@@ -532,7 +626,8 @@ frontend/
 **Tool: Zustand** — minimal, TypeScript-first, no boilerplate.
 
 ```
-authStore      → session, user (set by onAuthStateChange at app root)
+authStore      → session, user, emailVerified (set by onAuthStateChange at app root;
+                 emailVerified loaded from /api/users/me after session is established)
 orgStore       → memberships[], selectedOrgId (loaded once at /home; cleared on sign-out)
 ```
 
@@ -687,22 +782,27 @@ This is the correct design for four concrete reasons:
 
 ### 5.2 Traffic Routing Table
 
-| Operation               | Route                               | Reason                                                    |
-| ----------------------- | ----------------------------------- | --------------------------------------------------------- |
-| Magic link send         | Supabase `signInWithOtp()`          | Auth-layer operation; no business data                    |
-| Session exchange        | Supabase `exchangeCodeForSession()` | Auth-layer operation                                      |
-| Token refresh           | Supabase SDK auto-refresh           | Auth-layer operation                                      |
-| Sign out                | Supabase `signOut()`                | Session invalidation                                      |
-| **GET** students list   | C# API                              | `GET /api/organizations/{orgId}/students`                 |
-| **GET** fee periods     | C# API                              | `GET /api/organizations/{orgId}/periods`                  |
-| **GET** user profile    | C# API                              | `GET /api/users/me`                                       |
-| **POST** student create | C# API                              | Requires audit_log in same transaction                    |
-| **POST** payment        | C# API                              | Financial write; requires teacher→student ownership check |
-| **PATCH** fee config    | C# API                              | Multi-step: close old, open new in one transaction        |
-| **POST** invite send    | C# API                              | Email lookup + conditional immediate linking              |
-| **POST** invite accept  | C# API                              | Token validation + email match + org membership insert    |
-| **PATCH** waive period  | C# API                              | Requires role validation; audit logged                    |
-| **POST** admin suspend  | C# API                              | Calls Supabase Admin API; sets is_active flag             |
+| Operation                        | Route                                                 | Reason                                                      |
+| -------------------------------- | ----------------------------------------------------- | ----------------------------------------------------------- |
+| Sign up (register)               | Supabase `signUp()`                                   | Auth-layer operation; no business data                      |
+| Sign in                          | Supabase `signInWithPassword()`                       | Auth-layer operation; credentials never touch C# API        |
+| Password reset request           | Supabase `resetPasswordForEmail()`                    | Auth-layer operation; dispatched directly from client       |
+| Password reset (new password)    | Supabase `exchangeCodeForSession()` + `updateUser()`  | Auth-layer operation; recovery session from PKCE code       |
+| Token refresh                    | Supabase SDK auto-refresh                             | Auth-layer operation                                        |
+| Sign out                         | Supabase `signOut()`                                  | Session invalidation                                        |
+| OTP dispatch (post-login verify) | Supabase `signInWithOtp({ shouldCreateUser: false })` | Auth-layer operation; OTP sent by Supabase SMTP             |
+| OTP confirmation                 | Supabase `verifyOtp()`                                | Auth-layer operation; validates 6-digit code                |
+| Mark email verified              | C# API `PATCH /api/users/email-verification`          | Writes email_verified = TRUE + audit_log in one transaction |
+| **GET** students list            | C# API                                                | `GET /api/organizations/{orgId}/students`                   |
+| **GET** fee periods              | C# API                                                | `GET /api/organizations/{orgId}/periods`                    |
+| **GET** user profile             | C# API                                                | `GET /api/users/me`                                         |
+| **POST** student create          | C# API                                                | Requires audit_log in same transaction                      |
+| **POST** payment                 | C# API                                                | Financial write; requires teacher→student ownership check   |
+| **PATCH** fee config             | C# API                                                | Multi-step: close old, open new in one transaction          |
+| **POST** invite send             | C# API                                                | Email lookup + conditional immediate linking                |
+| **POST** invite accept           | C# API                                                | Token validation + email match + org membership insert      |
+| **PATCH** waive period           | C# API                                                | Requires role validation; audit logged                      |
+| **POST** admin suspend           | C# API                                                | Calls Supabase Admin API; sets is_active flag               |
 
 ### 5.3 API Client Configuration
 
@@ -728,7 +828,7 @@ apiClient.interceptors.request.use(async (config) => {
   return config;
 });
 
-// Response interceptor: handle 401 (expired session), 403 (suspended account)
+// Response interceptor: handle 401 (expired session), 403 (suspended or unverified account)
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -737,7 +837,7 @@ apiClient.interceptors.response.use(
       await supabase.auth.signOut();
     }
     if (error.response?.status === 403) {
-      // Account suspended mid-session — show suspension message, not raw error
+      // Account suspended or email_verified = FALSE — show appropriate message, not raw error
     }
     return Promise.reject(error);
   },
@@ -755,9 +855,11 @@ Feature        Backend (Application/Features/)         Frontend (src/features/) 
 ─────────────  ──────────────────────────────────────  ─────────────────────────────────  ─────────────────────
 auth           Auth/Commands/GlobalSignOutCommand       auth/services/authService          (no DTO schemas)
                Auth/Queries/GetCurrentUserQuery         auth/hooks/useAuthSession
+                                                        auth/hooks/useEmailVerification
 
 users          Users/Commands/UpdateProfileCommand      users/services/usersApiClient      UserProfileDto
-               Users/Queries/GetUserProfileQuery        users/hooks/useUserProfile         UpdateProfileRequest
+               Users/Commands/VerifyEmailCommand        users/hooks/useUserProfile         UpdateProfileRequest
+               Users/Queries/GetUserProfileQuery
 
 organizations  Organizations/Commands/CreateOrgCommand  orgs/services/orgsApiClient        OrganizationDto
                Organizations/Queries/GetOrgQuery        orgs/hooks/useOrgMemberships       CreateOrganizationRequest
@@ -807,6 +909,7 @@ These rules are **AI-agent enforceable**. Violations should fail linting or code
 | Zustand store exports | `use + Name + Store`                                                    | `useAuthStore`, `useOrgStore` |
 | Env variable (client) | `EXPO_PUBLIC_` prefix, SCREAMING_SNAKE                                  | `EXPO_PUBLIC_API_BASE_URL`    |
 | Currency display      | always via `formatCurrency(amount, currency)` — never inline formatting |                               |
+| Password validation   | always via `passwordValidation.ts` util — never inline regex            | `validatePassword(pwd)`       |
 
 ### 7.3 API Endpoint Conventions
 
@@ -817,6 +920,7 @@ Create:          POST   /api/organizations/{orgId}/students
 Update:          PATCH  /api/organizations/{orgId}/students/{studentId}
 Delete:          DELETE /api/organizations/{orgId}/students/{studentId}
 Action on noun:  PATCH  /api/organizations/{orgId}/periods/{periodId}/waive
+                 PATCH  /api/users/email-verification
                  POST   /api/invites/accept
                  POST   /api/admin/users/{userId}/revoke-sessions
 ```
@@ -832,7 +936,8 @@ All errors return standard RFC 7807 ProblemDetails:
 
 - **No business logic in controllers.** Controllers dispatch MediatR commands and return results.
 - **No direct DB access in Application layer.** Only Infrastructure touches EF Core.
-- **No Supabase client in frontend feature services for data access.** All reads and writes use `apiClient` (backend). `supabase` is used only for authentication.
+- **No Supabase client in frontend feature services for data access.** All reads and writes use `apiClient` (backend). `supabase` is used only for authentication operations (signUp, signInWithPassword, signOut, resetPasswordForEmail, updateUser, signInWithOtp, verifyOtp).
+- **No raw passwords stored, logged, or transmitted through the C# API.** Credentials are handled exclusively by Supabase Auth. No password column exists on any application table.
 - **No hand-editing `shared/generated/`.** Fully generated; overwritten on each codegen run.
 - **No `any` type in TypeScript.** ESLint `@typescript-eslint/no-explicit-any` set to `error`.
 
@@ -1012,5 +1117,5 @@ This structure is purpose-built for AI agent consumption:
 
 ---
 
-_End of TuitionIQ Project Structure — v1.1.1_
+_End of TuitionIQ Project Structure — v2.0.0_
 _Stack: React Expo (Web + Mobile) · C# ASP.NET Core · Supabase Auth (PostgreSQL)_
