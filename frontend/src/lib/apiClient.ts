@@ -1,6 +1,6 @@
 import axios, { type AxiosError } from "axios";
 import Constants from "expo-constants";
-import { router } from "expo-router";
+import { router, type Href } from "expo-router";
 import { Platform } from "react-native";
 import { queryClient } from "@/src/lib/queryClient";
 import { supabase } from "@/src/lib/supabase";
@@ -101,13 +101,28 @@ apiClient.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
     const statusCode = error.response?.status;
+    const responseData = error.response?.data as { code?: string } | undefined;
+    const code = responseData?.code;
 
     if (statusCode === 401) {
       await supabase.auth.signOut();
       useAuthStore.getState().clearAuth();
       useOrgStore.getState().clearOrg();
       queryClient.clear();
-      router.replace("/login");
+      router.replace("/(auth)/login");
+    }
+
+    if (statusCode === 403 && code === "ACCOUNT_SUSPENDED") {
+      await supabase.auth.signOut();
+      useAuthStore.getState().clearAuth();
+      useOrgStore.getState().clearOrg();
+      queryClient.clear();
+      router.replace("/(auth)/login");
+    }
+
+    if (statusCode === 403 && code === "EMAIL_NOT_VERIFIED") {
+      useAuthStore.getState().setEmailVerified(false);
+      router.replace("/(verify)/verify-email" as Href);
     }
 
     return Promise.reject(error);
