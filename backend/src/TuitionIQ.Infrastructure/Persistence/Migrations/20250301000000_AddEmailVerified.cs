@@ -23,7 +23,7 @@ public partial class AddEmailVerified : Migration
       column: "email_verified",
       filter: "\"deleted_at\" IS NULL");
 
-    // existing magic-link users are treated as already verified.
+    // existing users are treated as already verified during this migration.
     migrationBuilder.Sql(@"
 UPDATE public.users
 SET email_verified = TRUE

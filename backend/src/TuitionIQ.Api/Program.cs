@@ -101,3 +101,7 @@ app.UseAuthorization();  // Enforces access rules (e.g. [Authorize] attributes, 
 app.MapControllers();  // Executes the matched controller action for the request
 
 app.Run();  // Starts the application and begins listening for incoming requests
+
+public partial class Program
+{
+}

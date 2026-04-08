@@ -9,7 +9,7 @@ namespace TuitionIQ.IntegrationTests.Auth;
 public sealed class EmailVerificationMiddlewareTests
 {
   [Fact]
-  public async Task UnverifiedUsers_Receive403_OnProtectedEndpoints()
+  public async Task UnverifiedUsers_Receive403_OnProtectedEndpoints_ExceptEmailVerification()
   {
     await using var factory = new TestWebApplicationFactory();
 
@@ -30,7 +30,6 @@ public sealed class EmailVerificationMiddlewareTests
         lastName = "User",
         phone = "+8801000000000"
       })),
-      await client.PatchAsync("/api/users/email-verification", JsonBody(new { })),
       await client.PostAsync("/api/organizations", JsonBody(new
       {
         name = "Integration Org",
@@ -50,6 +49,9 @@ public sealed class EmailVerificationMiddlewareTests
       var body = await response.Content.ReadAsStringAsync();
       Assert.Contains("EMAIL_NOT_VERIFIED", body, StringComparison.Ordinal);
     }
+
+    var verifyEmailResponse = await client.PatchAsync("/api/users/email-verification", JsonBody(new { }));
+    Assert.Equal(HttpStatusCode.OK, verifyEmailResponse.StatusCode);
   }
 
   [Fact]

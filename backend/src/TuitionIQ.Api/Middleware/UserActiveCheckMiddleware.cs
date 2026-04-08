@@ -9,6 +9,7 @@ public sealed class UserActiveCheckMiddleware
   private const string UserStatusCacheKey = "UserActiveCheckMiddleware.Status";
   private const string AccountSuspendedCode = "ACCOUNT_SUSPENDED";
   private const string EmailNotVerifiedCode = "EMAIL_NOT_VERIFIED";
+  private static readonly PathString EmailVerificationPath = new("/api/users/email-verification");
   private readonly RequestDelegate _next;
 
   private sealed record UserStatus(bool IsActive, bool EmailVerified);
@@ -20,6 +21,8 @@ public sealed class UserActiveCheckMiddleware
 
   public async Task InvokeAsync(HttpContext context, AppDbContext dbContext)
   {
+    var allowUnverifiedRequest = AllowsUnverifiedUser(context.Request.Path);
+
     if (context.User.Identity?.IsAuthenticated != true)
     {
       await _next(context);
@@ -36,6 +39,12 @@ public sealed class UserActiveCheckMiddleware
 
       if (!cachedStatus.EmailVerified)
       {
+        if (allowUnverifiedRequest)
+        {
+          await _next(context);
+          return;
+        }
+
         // API must block unverified users independently of client route guards.
         await WriteForbiddenAsync(context, EmailNotVerifiedCode);
         return;
@@ -70,11 +79,22 @@ public sealed class UserActiveCheckMiddleware
 
     if (!resolvedStatus.EmailVerified)
     {
+      if (allowUnverifiedRequest)
+      {
+        await _next(context);
+        return;
+      }
+
       await WriteForbiddenAsync(context, EmailNotVerifiedCode);
       return;
     }
 
     await _next(context);
+  }
+
+  private static bool AllowsUnverifiedUser(PathString requestPath)
+  {
+    return requestPath.StartsWithSegments(EmailVerificationPath, StringComparison.OrdinalIgnoreCase);
   }
 
   private static async Task WriteForbiddenAsync(HttpContext context, string code)
