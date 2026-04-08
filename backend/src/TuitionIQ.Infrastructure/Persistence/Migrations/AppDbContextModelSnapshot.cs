@@ -719,6 +719,12 @@ namespace TuitionIQ.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(255)")
                         .HasColumnName("email");
 
+                    b.Property<bool>("EmailVerified")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("email_verified");
+
                     b.Property<string>("FirstName")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -760,6 +766,10 @@ namespace TuitionIQ.Infrastructure.Persistence.Migrations
                     b.HasIndex("Email")
                         .IsUnique()
                         .HasDatabaseName("idx_users_email")
+                        .HasFilter("\"deleted_at\" IS NULL");
+
+                    b.HasIndex("EmailVerified")
+                        .HasDatabaseName("idx_users_email_verified")
                         .HasFilter("\"deleted_at\" IS NULL");
 
                     b.ToTable("users", "public");

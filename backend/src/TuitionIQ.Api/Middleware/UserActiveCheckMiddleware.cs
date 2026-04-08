@@ -6,8 +6,12 @@ namespace TuitionIQ.Api.Middleware;
 
 public sealed class UserActiveCheckMiddleware
 {
-  private const string UserActiveCacheKey = "UserActiveCheckMiddleware.IsActive";
+  private const string UserStatusCacheKey = "UserActiveCheckMiddleware.Status";
+  private const string AccountSuspendedCode = "ACCOUNT_SUSPENDED";
+  private const string EmailNotVerifiedCode = "EMAIL_NOT_VERIFIED";
   private readonly RequestDelegate _next;
+
+  private sealed record UserStatus(bool IsActive, bool EmailVerified);
 
   public UserActiveCheckMiddleware(RequestDelegate next)
   {
@@ -22,11 +26,18 @@ public sealed class UserActiveCheckMiddleware
       return;
     }
 
-    if (context.Items.TryGetValue(UserActiveCacheKey, out var cachedValue) && cachedValue is bool cachedIsActive)
+    if (context.Items.TryGetValue(UserStatusCacheKey, out var cachedValue) && cachedValue is UserStatus cachedStatus)
     {
-      if (!cachedIsActive)
+      if (!cachedStatus.IsActive)
       {
-        await WriteForbiddenAsync(context);
+        await WriteForbiddenAsync(context, AccountSuspendedCode);
+        return;
+      }
+
+      if (!cachedStatus.EmailVerified)
+      {
+        // API must block unverified users independently of client route guards.
+        await WriteForbiddenAsync(context, EmailNotVerifiedCode);
         return;
       }
 
@@ -37,29 +48,36 @@ public sealed class UserActiveCheckMiddleware
     var subClaim = context.User.FindFirst("sub")?.Value;
     if (!Guid.TryParse(subClaim, out var userId))
     {
-      context.Items[UserActiveCacheKey] = false;
-      await WriteForbiddenAsync(context);
+      context.Items[UserStatusCacheKey] = new UserStatus(false, false);
+      await WriteForbiddenAsync(context, AccountSuspendedCode);
       return;
     }
 
-    IQueryable<bool> isActiveQuery = dbContext.Users
+    IQueryable<UserStatus> userStatusQuery = dbContext.Users
       .AsNoTracking()
-      .Where(user => user.Id == userId && user.IsActive)
-      .Select(user => user.IsActive);
+      .Where(user => user.Id == userId)
+      .Select(user => new UserStatus(user.IsActive, user.EmailVerified));
 
-    var isActive = await isActiveQuery.FirstOrDefaultAsync(context.RequestAborted);
-    context.Items[UserActiveCacheKey] = isActive;
+    var status = await userStatusQuery.FirstOrDefaultAsync(context.RequestAborted);
+    var resolvedStatus = status ?? new UserStatus(false, false);
+    context.Items[UserStatusCacheKey] = resolvedStatus;
 
-    if (!isActive)
+    if (!resolvedStatus.IsActive)
     {
-      await WriteForbiddenAsync(context);
+      await WriteForbiddenAsync(context, AccountSuspendedCode);
+      return;
+    }
+
+    if (!resolvedStatus.EmailVerified)
+    {
+      await WriteForbiddenAsync(context, EmailNotVerifiedCode);
       return;
     }
 
     await _next(context);
   }
 
-  private static async Task WriteForbiddenAsync(HttpContext context)
+  private static async Task WriteForbiddenAsync(HttpContext context, string code)
   {
     if (context.Response.HasStarted)
     {
@@ -67,15 +85,6 @@ public sealed class UserActiveCheckMiddleware
     }
 
     context.Response.StatusCode = StatusCodes.Status403Forbidden;
-
-    var problem = new ProblemDetails
-    {
-      Status = StatusCodes.Status403Forbidden,
-      Title = "Forbidden",
-      Detail = "The current user is inactive or unavailable.",
-      Type = "https://httpstatuses.com/403"
-    };
-
-    await context.Response.WriteAsJsonAsync(problem);
+    await context.Response.WriteAsJsonAsync(new { code });
   }
 }

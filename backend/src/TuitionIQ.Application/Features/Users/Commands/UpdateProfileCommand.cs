@@ -88,7 +88,8 @@ public sealed class UpdateProfileCommandHandler : IRequestHandler<UpdateProfileC
       FirstName = user.FirstName,
       LastName = user.LastName,
       Phone = user.Phone,
-      AvatarUrl = user.AvatarUrl
+      AvatarUrl = user.AvatarUrl,
+      EmailVerified = user.EmailVerified
     };
   }
 }

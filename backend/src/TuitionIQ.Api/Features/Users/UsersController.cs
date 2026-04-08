@@ -40,4 +40,11 @@ public sealed class UsersController : ControllerBase
 
     return Ok(result);
   }
+
+  [HttpPatch("email-verification")]
+  public async Task<IActionResult> VerifyEmail(CancellationToken cancellationToken)
+  {
+    await _mediator.Send(new VerifyEmailCommand(_currentUserService.UserId), cancellationToken);
+    return Ok();
+  }
 }

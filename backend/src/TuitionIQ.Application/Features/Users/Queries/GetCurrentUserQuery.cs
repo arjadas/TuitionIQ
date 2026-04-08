@@ -27,7 +27,8 @@ public sealed class GetCurrentUserQueryHandler : IRequestHandler<GetCurrentUserQ
         FirstName = user.FirstName,
         LastName = user.LastName,
         Phone = user.Phone,
-        AvatarUrl = user.AvatarUrl
+        AvatarUrl = user.AvatarUrl,
+        EmailVerified = user.EmailVerified
       });
 
     var profile = await _dbContext.FirstOrDefaultAsync(profileQuery, cancellationToken);

@@ -8,4 +8,5 @@ public sealed record UserProfileDto
   public string LastName { get; init; } = string.Empty;
   public string? Phone { get; init; }
   public string? AvatarUrl { get; init; }
+  public bool EmailVerified { get; init; }
 }
