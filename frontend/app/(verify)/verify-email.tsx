@@ -18,7 +18,7 @@ const RESEND_COOLDOWN_SECONDS = 60;
 export default function VerifyEmailScreen() {
   const router = useRouter();
   const session = useAuthStore((state) => state.session);
-  const { sendVerificationOtp, verifyEmailOtp } = useEmailVerification();
+  const { refreshEmailVerificationStatus, sendVerificationOtp, verifyEmailOtp } = useEmailVerification();
 
   const [otpCode, setOtpCode] = useState("");
   const [isSendingCode, setIsSendingCode] = useState(false);
@@ -71,8 +71,20 @@ export default function VerifyEmailScreen() {
     }
 
     hasAutoSentCode.current = true;
-    void sendCode();
-  }, [sendCode]);
+    void (async () => {
+      try {
+        const isVerified = await refreshEmailVerificationStatus();
+        if (isVerified) {
+          router.replace("/home");
+          return;
+        }
+
+        await sendCode();
+      } catch (error) {
+        setErrorMessage(error instanceof Error ? error.message : "Could not send verification code.");
+      }
+    })();
+  }, [refreshEmailVerificationStatus, router, sendCode]);
 
   const verify = async (): Promise<void> => {
     setIsVerifying(true);

@@ -44,6 +44,8 @@ function getApiErrorMessage(error: unknown, fallbackMessage: string): string {
 export function useInviteFlow({ initialToken, initialEmail }: UseInviteFlowArgs) {
   const router = useRouter();
   const session = useAuthStore((state) => state.session);
+  const setSession = useAuthStore((state) => state.setSession);
+  const setUser = useAuthStore((state) => state.setUser);
   const emailVerified = useAuthStore((state) => state.emailVerified);
   const selectOrg = useOrgStore((state) => state.selectOrg);
 
@@ -135,8 +137,23 @@ export function useInviteFlow({ initialToken, initialEmail }: UseInviteFlowArgs)
   };
 
   const continueWithSession = async (): Promise<void> => {
-    if (!session) {
+    const {
+      data: { session: currentSession },
+      error: sessionError,
+    } = await authService.getSession();
+
+    if (sessionError) {
+      throw new Error(sessionError.message || "Could not load your session.");
+    }
+
+    const activeSession = currentSession ?? session;
+    if (!activeSession) {
       throw new Error("Sign in first to accept this invite.");
+    }
+
+    if (currentSession) {
+      setSession(currentSession);
+      setUser(currentSession.user);
     }
 
     const verifiedNow = emailVerified || (await refreshEmailVerificationStatus());
@@ -165,9 +182,14 @@ export function useInviteFlow({ initialToken, initialEmail }: UseInviteFlowArgs)
           throw new Error("Email and password are required.");
         }
 
-        const { error } = await authService.signInWithPassword(normalizedEmail, password);
+        const { data, error } = await authService.signInWithPassword(normalizedEmail, password);
         if (error) {
           throw new Error(error.message || "Could not sign in.");
+        }
+
+        if (data.session) {
+          setSession(data.session);
+          setUser(data.session.user);
         }
       } else {
         if (!firstName.trim() || !lastName.trim() || !normalizedEmail || !password) {
@@ -183,7 +205,7 @@ export function useInviteFlow({ initialToken, initialEmail }: UseInviteFlowArgs)
           throw new Error("Passwords do not match.");
         }
 
-        const { error } = await authService.signUp({
+        const { data, error } = await authService.signUp({
           firstName: firstName.trim(),
           lastName: lastName.trim(),
           email: normalizedEmail,
@@ -192,6 +214,11 @@ export function useInviteFlow({ initialToken, initialEmail }: UseInviteFlowArgs)
 
         if (error) {
           throw new Error(error.message || "Could not create your account.");
+        }
+
+        if (data.session) {
+          setSession(data.session);
+          setUser(data.session.user);
         }
       }
 

@@ -86,12 +86,15 @@ export const apiClient = axios.create({
 
 apiClient.interceptors.request.use(async (config) => {
   const {
-    data: { session },
+    data: { session: supabaseSession },
   } = await supabase.auth.getSession();
 
-  if (session?.access_token) {
+  const storeSession = useAuthStore.getState().session;
+  const accessToken = supabaseSession?.access_token ?? storeSession?.access_token;
+
+  if (accessToken) {
     config.headers = config.headers ?? {};
-    config.headers.Authorization = `Bearer ${session.access_token}`;
+    config.headers.Authorization = `Bearer ${accessToken}`;
   }
 
   return config;

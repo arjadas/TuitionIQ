@@ -1,6 +1,7 @@
 import { useEmailVerification } from "@/src/features/auth/hooks/useEmailVerification";
 import { authService } from "@/src/features/auth/services/authService";
 import { PasswordInput } from "@/src/shared/components/ui/PasswordInput";
+import { useAuthStore } from "@/src/store/authStore";
 import { type Href, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, SafeAreaView, StyleSheet, Text, TextInput, View } from "react-native";
@@ -13,6 +14,8 @@ export default function LoginScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ email?: string }>();
   const { refreshEmailVerificationStatus } = useEmailVerification();
+  const setSession = useAuthStore((state) => state.setSession);
+  const setUser = useAuthStore((state) => state.setUser);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -43,7 +46,7 @@ export default function LoginScreen() {
     setIsSubmitting(true);
     setErrorMessage(null);
 
-    const { error } = await authService.signInWithPassword(normalizedEmail, password);
+    const { data, error } = await authService.signInWithPassword(normalizedEmail, password);
 
     if (error) {
       if (isInvalidCredentialsError(error.message)) {
@@ -55,6 +58,11 @@ export default function LoginScreen() {
 
       setIsSubmitting(false);
       return;
+    }
+
+    if (data.session) {
+      setSession(data.session);
+      setUser(data.session.user);
     }
 
     setFailedAttempts(0);

@@ -25,10 +25,32 @@ function getSessionEmail(email: string | null | undefined): string {
 }
 
 export function useEmailVerification() {
-  const session = useAuthStore((state) => state.session);
+  const sessionEmail = useAuthStore((state) => state.session?.user?.email);
   const setEmailVerified = useAuthStore((state) => state.setEmailVerified);
 
+  const getActiveSessionEmail = async (): Promise<string> => {
+    const {
+      data: { session },
+      error,
+    } = await authService.getSession();
+
+    if (error) {
+      throw new Error(error.message || "Could not load your session.");
+    }
+
+    return getSessionEmail(session?.user?.email ?? sessionEmail);
+  };
+
   const refreshEmailVerificationStatus = async (): Promise<boolean> => {
+    const {
+      data: { session },
+      error,
+    } = await authService.getSession();
+
+    if (error) {
+      throw new Error(error.message || "Could not refresh your session.");
+    }
+
     if (!session) {
       setEmailVerified(false);
       return false;
@@ -49,7 +71,7 @@ export function useEmailVerification() {
   };
 
   const sendVerificationOtp = async (): Promise<void> => {
-    const email = getSessionEmail(session?.user?.email);
+    const email = await getActiveSessionEmail();
     const { error } = await authService.sendVerificationOtp(email);
 
     if (error) {
@@ -58,7 +80,7 @@ export function useEmailVerification() {
   };
 
   const verifyEmailOtp = async (otpCode: string): Promise<void> => {
-    const email = getSessionEmail(session?.user?.email);
+    const email = await getActiveSessionEmail();
     const token = otpCode.trim();
 
     if (token.length !== 6) {
@@ -75,7 +97,11 @@ export function useEmailVerification() {
       throw new Error(refreshError.message || "Could not refresh your session.");
     }
 
-    await usersApiClient.markEmailVerified();
+    const isAlreadyVerified = await refreshEmailVerificationStatus();
+    if (!isAlreadyVerified) {
+      await usersApiClient.markEmailVerified();
+    }
+
     setEmailVerified(true);
   };
 
