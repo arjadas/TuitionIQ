@@ -12,7 +12,7 @@ async function updateProfile(request: UpdateProfileRequest): Promise<UserProfile
 }
 
 async function markEmailVerified(): Promise<void> {
-  await apiClient.patch("/api/users/email-verification");
+  await apiClient.patch("/api/users/email-verification", {});
 }
 
 export const usersApiClient = {

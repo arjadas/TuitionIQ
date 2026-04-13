@@ -1,67 +1,54 @@
 import { useEffect } from "react";
-import { AxiosError } from "axios";
-import { authService } from "@/src/features/auth/services/authService";
-import { usersApiClient } from "@/src/features/users/services/usersApiClient";
+import { router } from "expo-router";
+import { AppState, type AppStateStatus, Platform } from "react-native";
+import { isApiClientError } from "@/src/lib/apiClient";
 import { supabase } from "@/src/lib/supabase";
 import { useAuthStore } from "@/src/store/authStore";
+import { useOrgStore } from "@/src/store/orgStore";
+import { usersApiClient } from "@/src/features/users/services/usersApiClient";
 
-type UseAuthSessionOptions = {
-  onPasswordRecovery?: () => void;
-  onSignedOut?: () => void;
-};
-
-type ApiErrorResponse = {
-  code?: string;
-};
-
-function isEmailNotVerifiedResponse(error: unknown): boolean {
-  if (!(error instanceof AxiosError)) {
-    return false;
-  }
-
-  const code = (error.response?.data as ApiErrorResponse | undefined)?.code;
-  if (error.response?.status !== 403) {
-    return false;
-  }
-
-  if (code === "EMAIL_NOT_VERIFIED") {
-    return true;
-  }
-
-  const requestUrl = error.config?.url;
-  return requestUrl === "/api/users/me";
-}
-
-function isAccountSuspendedResponse(error: unknown): boolean {
-  if (!(error instanceof AxiosError)) {
-    return false;
-  }
-
-  const code = (error.response?.data as ApiErrorResponse | undefined)?.code;
-  return error.response?.status === 403 && code === "ACCOUNT_SUSPENDED";
-}
-
-function isInvalidRefreshTokenError(errorMessage: string | null | undefined): boolean {
-  if (!errorMessage) {
-    return false;
-  }
-
-  return errorMessage.toLowerCase().includes("invalid refresh token");
-}
-
-export function useAuthSession(options: UseAuthSessionOptions = {}): void {
-  const { onPasswordRecovery, onSignedOut } = options;
+export function useAuthSession(): void
+{
   const setSession = useAuthStore((state) => state.setSession);
   const setUser = useAuthStore((state) => state.setUser);
   const setEmailVerified = useAuthStore((state) => state.setEmailVerified);
   const setInitialised = useAuthStore((state) => state.setInitialised);
   const clearAuth = useAuthStore((state) => state.clearAuth);
+  const clearOrg = useOrgStore((state) => state.clearOrg);
 
   useEffect(() => {
-    let isMounted = true;
+    let mounted = true;
 
-    const applySessionState = (session: Awaited<ReturnType<typeof authService.getSession>>["data"]["session"]): void => {
-      if (!isMounted) {
+    const syncEmailVerificationStatus = async (
+      session: Awaited<ReturnType<typeof supabase.auth.getSession>>["data"]["session"],
+    ): Promise<void> => {
+      if (!mounted || !session) {
+        return;
+      }
+
+      try {
+        const profile = await usersApiClient.getCurrentUserProfile();
+        if (mounted) {
+          setEmailVerified(profile.emailVerified);
+        }
+      } catch (error) {
+        if (isApiClientError(error) && error.code === "EMAIL_NOT_VERIFIED") {
+          if (mounted) {
+            setEmailVerified(false);
+          }
+          return;
+        }
+
+        if (mounted) {
+          setEmailVerified(false);
+        }
+      }
+    };
+
+    const applySession = async (
+      session: Awaited<ReturnType<typeof supabase.auth.getSession>>["data"]["session"],
+    ): Promise<void> => {
+      if (!mounted) {
         return;
       }
 
@@ -70,71 +57,25 @@ export function useAuthSession(options: UseAuthSessionOptions = {}): void {
 
       if (!session) {
         setEmailVerified(false);
-      }
-    };
-
-    const syncEmailVerification = async (
-      session: Awaited<ReturnType<typeof authService.getSession>>["data"]["session"],
-    ): Promise<void> => {
-      if (!session) {
         return;
       }
 
-      try {
-        const profile = await usersApiClient.getCurrentUserProfile();
-        if (isMounted) {
-          setEmailVerified(profile.emailVerified);
-        }
-      } catch (error) {
-        if (isEmailNotVerifiedResponse(error)) {
-          if (isMounted) {
-            setEmailVerified(false);
-          }
-          return;
-        }
+      await syncEmailVerificationStatus(session);
+    };
 
-        if (isAccountSuspendedResponse(error)) {
-          await authService.signOut();
-          if (isMounted) {
-            clearAuth();
-          }
-          return;
-        }
-
-        if (isMounted) {
-          setEmailVerified(false);
-        }
-      }
+    const handleSignedOut = (): void => {
+      clearAuth();
+      clearOrg();
+      router.replace("/(auth)/login");
     };
 
     void (async () => {
       const {
         data: { session },
-        error,
-      } = await authService.getSession();
+      } = await supabase.auth.getSession();
 
-      if (error) {
-        console.log("[auth/session] getSession failed", { message: error.message });
-
-        if (isInvalidRefreshTokenError(error.message)) {
-          await authService.signOut();
-          if (isMounted) {
-            clearAuth();
-            setInitialised(true);
-          }
-          return;
-        }
-
-        if (isMounted) {
-          setInitialised(true);
-        }
-        return;
-      }
-
-      applySessionState(session);
-      await syncEmailVerification(session);
-
-      if (isMounted) {
+      await applySession(session);
+      if (mounted) {
         setInitialised(true);
       }
     })();
@@ -142,37 +83,50 @@ export function useAuthSession(options: UseAuthSessionOptions = {}): void {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
-      
-      console.log("[auth/session] onAuthStateChange", { event, hasSession: Boolean(session) });
-
-      applySessionState(session);
-
-      if (event === "PASSWORD_RECOVERY") {
-        onPasswordRecovery?.();
-      }
-
       if (event === "SIGNED_OUT") {
-        if (isMounted) {
-          clearAuth();
-          setInitialised(true);
-        }
-
-        onSignedOut?.();
+        handleSignedOut();
         return;
       }
 
-      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "USER_UPDATED") {
-        void syncEmailVerification(session);
+      if (event === "PASSWORD_RECOVERY") {
+        router.replace("/(auth)/reset-password");
       }
 
-      if (isMounted) {
+      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "USER_UPDATED" || event === "PASSWORD_RECOVERY") {
+        void applySession(session);
+      }
+
+      if (mounted) {
         setInitialised(true);
       }
     });
 
+    let appStateSubscription: { remove: () => void } | null = null;
+
+    if (Platform.OS !== "web") {
+      appStateSubscription = AppState.addEventListener("change", (state: AppStateStatus) => {
+        if (state === "active") {
+          supabase.auth.startAutoRefresh();
+        } else {
+          supabase.auth.stopAutoRefresh();
+        }
+      });
+    }
+
     return () => {
-      isMounted = false;
+      mounted = false;
       subscription.unsubscribe();
+      appStateSubscription?.remove();
+      if (Platform.OS !== "web") {
+        supabase.auth.stopAutoRefresh();
+      }
     };
-  }, [clearAuth, onPasswordRecovery, onSignedOut, setEmailVerified, setInitialised, setSession, setUser]);
+  }, [
+    clearAuth,
+    clearOrg,
+    setEmailVerified,
+    setInitialised,
+    setSession,
+    setUser,
+  ]);
 }

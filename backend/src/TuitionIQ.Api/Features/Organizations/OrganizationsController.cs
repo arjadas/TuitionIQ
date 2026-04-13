@@ -28,7 +28,7 @@ public sealed class OrganizationsController : ControllerBase
     CancellationToken cancellationToken)
   {
     var organization = await _mediator.Send(
-      new CreateOrganizationCommand(_currentUserService.UserId, request.Name, request.Slug),
+      new CreateOrganizationCommand(_currentUserService.GetUserId(), request.Name, request.Slug),
       cancellationToken);
 
     return Ok(organization);
@@ -38,7 +38,7 @@ public sealed class OrganizationsController : ControllerBase
   public async Task<ActionResult<OrganizationDto>> GetOrganization(Guid id, CancellationToken cancellationToken)
   {
     var organization = await _mediator.Send(
-      new GetOrganizationQuery(id, _currentUserService.UserId),
+      new GetOrganizationQuery(id, _currentUserService.GetUserId()),
       cancellationToken);
 
     return Ok(organization);
@@ -51,7 +51,7 @@ public sealed class OrganizationsController : ControllerBase
     CancellationToken cancellationToken)
   {
     var organization = await _mediator.Send(
-      new UpdateOrganizationCommand(id, _currentUserService.UserId, request.Name, request.Settings),
+      new UpdateOrganizationCommand(id, _currentUserService.GetUserId(), request.Name, request.Settings),
       cancellationToken);
 
     return Ok(organization);
@@ -60,7 +60,7 @@ public sealed class OrganizationsController : ControllerBase
   [HttpGet("memberships")]
   public async Task<ActionResult<IReadOnlyList<MembershipDto>>> GetMyMemberships(CancellationToken cancellationToken)
   {
-    var memberships = await _mediator.Send(new GetMyMembershipsQuery(_currentUserService.UserId), cancellationToken);
+    var memberships = await _mediator.Send(new GetMyMembershipsQuery(_currentUserService.GetUserId()), cancellationToken);
     return Ok(memberships);
   }
 }

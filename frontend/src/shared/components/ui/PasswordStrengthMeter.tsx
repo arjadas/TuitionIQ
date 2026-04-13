@@ -5,78 +5,96 @@ type PasswordStrengthMeterProps = {
   password: string;
 };
 
-function getStrengthLabel(score: number): string {
-  if (score <= 1) {
-    return "Very weak";
+type StrengthLevel = "empty" | "weak" | "medium" | "strong";
+
+function resolveStrength(password: string): StrengthLevel
+{
+  if (!password) {
+    return "empty";
   }
 
-  if (score <= 3) {
-    return "Needs improvement";
+  const validation = validatePassword(password);
+  if (validation.valid) {
+    return "strong";
   }
 
-  if (score === 4) {
-    return "Strong";
+  if (validation.errors.length <= 2) {
+    return "medium";
   }
 
-  return "Very strong";
+  return "weak";
 }
 
-export function PasswordStrengthMeter({ password }: PasswordStrengthMeterProps) {
-  const validation = validatePassword(password);
-  const score = validation.score;
+function getLabel(level: StrengthLevel): string
+{
+  if (level === "empty") {
+    return "Empty";
+  }
+
+  if (level === "weak") {
+    return "Weak";
+  }
+
+  if (level === "medium") {
+    return "Medium";
+  }
+
+  return "Strong";
+}
+
+export function PasswordStrengthMeter({ password }: PasswordStrengthMeterProps)
+{
+  const level = resolveStrength(password);
 
   return (
-    <View style={styles.wrapper}>
-      <View style={styles.barRow}>
-        {[0, 1, 2, 3, 4].map((index) => (
-          <View
-            key={index}
-            style={[
-              styles.bar,
-              index < score ? styles.barActive : styles.barInactive,
-            ]}
-          />
-        ))}
+    <View style={styles.container}>
+      <View style={styles.track}>
+        <View
+          style={[
+            styles.fill,
+            level === "empty" && styles.empty,
+            level === "weak" && styles.weak,
+            level === "medium" && styles.medium,
+            level === "strong" && styles.strong,
+          ]}
+        />
       </View>
-      <Text style={styles.label}>Password strength: {getStrengthLabel(score)}</Text>
-      <View style={styles.requirements}>
-        <Text style={styles.requirement}>At least 8 characters</Text>
-        <Text style={styles.requirement}>Uppercase and lowercase letters</Text>
-        <Text style={styles.requirement}>At least one number and one special character</Text>
-      </View>
+      <Text style={styles.label}>Password strength: {getLabel(level)}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrapper: {
+  container: {
     gap: 6,
   },
-  barRow: {
-    flexDirection: "row",
-    gap: 6,
-  },
-  bar: {
-    height: 6,
+  track: {
+    height: 8,
     borderRadius: 999,
-    flex: 1,
+    backgroundColor: "#e2e8f0",
+    overflow: "hidden",
   },
-  barActive: {
-    backgroundColor: "#14b8a6",
+  fill: {
+    height: "100%",
   },
-  barInactive: {
-    backgroundColor: "#dbeafe",
+  empty: {
+    width: "0%",
+  },
+  weak: {
+    width: "35%",
+    backgroundColor: "#ef4444",
+  },
+  medium: {
+    width: "65%",
+    backgroundColor: "#f59e0b",
+  },
+  strong: {
+    width: "100%",
+    backgroundColor: "#16a34a",
   },
   label: {
     fontSize: 12,
-    color: "#0f172a",
+    color: "#475569",
     fontWeight: "600",
-  },
-  requirements: {
-    gap: 2,
-  },
-  requirement: {
-    fontSize: 12,
-    color: "#64748b",
   },
 });

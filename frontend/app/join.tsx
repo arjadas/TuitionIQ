@@ -1,260 +1,144 @@
-import { useInviteFlow } from "@/src/features/invites/hooks/useInviteFlow";
-import { authService } from "@/src/features/auth/services/authService";
-import { PasswordInput } from "@/src/shared/components/ui/PasswordInput";
+import { useEffect, useMemo, useState } from "react";
+import { Pressable, SafeAreaView, StyleSheet, Text, View } from "react-native";
+import { type Href, router, useLocalSearchParams } from "expo-router";
+import { EmailOtpVerificationForm } from "@/src/features/auth/components/EmailOtpVerificationForm";
+import { LoginForm } from "@/src/features/auth/components/LoginForm";
+import { SignUpForm } from "@/src/features/auth/components/SignUpForm";
+import { apiClient } from "@/src/lib/apiClient";
 import { stripUrlParam } from "@/src/shared/utils/stripUrlParam";
 import { useAuthStore } from "@/src/store/authStore";
-import { useLocalSearchParams } from "expo-router";
-import { useEffect, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
 
-export default function JoinScreen() {
+type JoinMode = "login" | "signup";
+
+export default function JoinScreen()
+{
   const params = useLocalSearchParams<{ token?: string; email?: string }>();
   const session = useAuthStore((state) => state.session);
+  const emailVerified = useAuthStore((state) => state.emailVerified);
 
-  const [initialToken, setInitialToken] = useState<string | null>(null);
-  const [initialEmail, setInitialEmail] = useState<string | null>(null);
-  const hasCapturedParams = useRef(false);
+  const [inviteToken, setInviteToken] = useState<string | null>(null);
+  const [inviteEmail, setInviteEmail] = useState<string | null>(null);
+  const [mode, setMode] = useState<JoinMode>("login");
+  const [detectedMode, setDetectedMode] = useState<JoinMode | null>(null);
+  const [isCheckingAccount, setIsCheckingAccount] = useState(false);
+  const [needsVerification, setNeedsVerification] = useState(false);
+  const [isAccepting, setIsAccepting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    if (hasCapturedParams.current) {
-      return;
-    }
-
     const token = typeof params.token === "string" ? params.token.trim() : "";
     const email = typeof params.email === "string" ? params.email.trim().toLowerCase() : "";
 
     if (token.length > 0) {
-      setInitialToken(token);
+      setInviteToken(token);
       stripUrlParam("token");
     }
 
     if (email.length > 0) {
-      setInitialEmail(email);
+      setInviteEmail(email);
       stripUrlParam("email");
     }
-
-    hasCapturedParams.current = true;
   }, [params.email, params.token]);
 
-  const {
-    authMode,
-    setAuthMode,
-    stage,
-    inviteToken,
-    email,
-    setEmail,
-    emailReadOnly,
-    firstName,
-    setFirstName,
-    lastName,
-    setLastName,
-    password,
-    setPassword,
-    confirmPassword,
-    setConfirmPassword,
-    otpCode,
-    setOtpCode,
-    cooldownRemaining,
-    canResendOtp,
-    isWorking,
-    errorMessage,
-    infoMessage,
-    submitAuth,
-    continueWithSession,
-    resendOtp,
-    verifyOtpAndAccept,
-  } = useInviteFlow({ initialToken, initialEmail });
-
-  const renderAuthModeSwitch = () => (
-    <View style={styles.modeSwitchRow}>
-      <Pressable
-        onPress={() => setAuthMode("login")}
-        style={[styles.modeSwitchButton, authMode === "login" ? styles.modeSwitchActive : null]}
-      >
-        <Text style={[styles.modeSwitchText, authMode === "login" ? styles.modeSwitchTextActive : null]}>
-          I already have an account
-        </Text>
-      </Pressable>
-      <Pressable
-        onPress={() => setAuthMode("signup")}
-        style={[styles.modeSwitchButton, authMode === "signup" ? styles.modeSwitchActive : null]}
-      >
-        <Text style={[styles.modeSwitchText, authMode === "signup" ? styles.modeSwitchTextActive : null]}>
-          I need an account
-        </Text>
-      </Pressable>
-    </View>
-  );
-
-  const renderAuthenticationStep = () => {
-    if (session) {
-      return (
-        <View style={styles.sectionBlock}>
-          <Text style={styles.sectionTitle}>Continue with your current account</Text>
-          <Text style={styles.sectionBody}>Signed in as {session.user.email ?? "your account"}.</Text>
-          <Pressable
-            disabled={isWorking}
-            onPress={() => {
-              void continueWithSession();
-            }}
-            style={[styles.primaryButton, isWorking && styles.primaryButtonDisabled]}
-          >
-            {isWorking ? (
-              <ActivityIndicator color="#ffffff" />
-            ) : (
-              <Text style={styles.primaryButtonText}>Continue and accept invite</Text>
-            )}
-          </Pressable>
-
-          <Pressable
-            onPress={() => {
-              void authService.signOut();
-            }}
-            style={styles.inlineLinkWrap}
-          >
-            <Text style={styles.inlineLink}>Use a different account</Text>
-          </Pressable>
-        </View>
-      );
+  useEffect(() => {
+    if (!inviteEmail || session) {
+      return;
     }
 
-    return (
-      <View style={styles.sectionBlock}>
-        {renderAuthModeSwitch()}
+    void (async () => {
+      setIsCheckingAccount(true);
+      try {
+        const { data } = await apiClient.get<{ email: string; exists: boolean }>("/api/auth/account-exists", {
+          params: { email: inviteEmail },
+        });
 
-        {authMode === "signup" ? (
-          <View style={styles.fieldBlock}>
-            <Text style={styles.label}>First name</Text>
-            <TextInput
-              onChangeText={setFirstName}
-              placeholder="First name"
-              style={styles.input}
-              value={firstName}
-            />
-          </View>
-        ) : null}
+        setDetectedMode(data.exists ? "login" : "signup");
+      } catch {
+        setDetectedMode("login");
+      } finally {
+        setIsCheckingAccount(false);
+      }
+    })();
+  }, [inviteEmail, session]);
 
-        {authMode === "signup" ? (
-          <View style={styles.fieldBlock}>
-            <Text style={styles.label}>Last name</Text>
-            <TextInput
-              onChangeText={setLastName}
-              placeholder="Last name"
-              style={styles.input}
-              value={lastName}
-            />
-          </View>
-        ) : null}
+  const resolvedMode = detectedMode ?? mode;
+  const isModeLocked = detectedMode !== null;
 
-        <View style={styles.fieldBlock}>
-          <Text style={styles.label}>Email address</Text>
-          <TextInput
-            autoCapitalize="none"
-            autoComplete="email"
-            editable={!emailReadOnly}
-            keyboardType="email-address"
-            onChangeText={setEmail}
-            placeholder="name@school.com"
-            style={[styles.input, emailReadOnly ? styles.readOnlyInput : null]}
-            value={email}
-          />
-        </View>
+  const canAcceptInvite = useMemo(() => {
+    return !!session && !!inviteToken && emailVerified;
+  }, [emailVerified, inviteToken, session]);
 
-        <PasswordInput
-          label="Password"
-          onChangeText={setPassword}
-          placeholder={authMode === "login" ? "Enter password" : "Create password"}
-          value={password}
-        />
+  async function acceptInvite(): Promise<void>
+  {
+    if (!inviteToken) {
+      setErrorMessage("Invite token is missing or invalid.");
+      return;
+    }
 
-        {authMode === "signup" ? (
-          <PasswordInput
-            label="Confirm password"
-            onChangeText={setConfirmPassword}
-            placeholder="Confirm password"
-            value={confirmPassword}
-          />
-        ) : null}
+    setIsAccepting(true);
+    setErrorMessage(null);
 
-        <Pressable
-          disabled={isWorking}
-          onPress={() => {
-            void submitAuth();
-          }}
-          style={[styles.primaryButton, isWorking && styles.primaryButtonDisabled]}
-        >
-          {isWorking ? (
-            <ActivityIndicator color="#ffffff" />
-          ) : (
-            <Text style={styles.primaryButtonText}>
-              {authMode === "login" ? "Sign in and continue" : "Create account and continue"}
-            </Text>
-          )}
-        </Pressable>
-      </View>
-    );
-  };
+    try {
+      await apiClient.post("/api/invites/accept", { token: inviteToken });
+      router.replace("/home" as Href);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not accept invite.";
+      setErrorMessage(message);
+    } finally {
+      setIsAccepting(false);
+    }
+  }
 
-  const renderOtpStep = () => (
-    <View style={styles.sectionBlock}>
-      <Text style={styles.sectionTitle}>Verify your email</Text>
-      <Text style={styles.sectionBody}>Enter the 6-digit code we sent to your email.</Text>
+  useEffect(() => {
+    if (!canAcceptInvite || isAccepting) {
+      return;
+    }
 
-      <View style={styles.fieldBlock}>
-        <Text style={styles.label}>Verification code</Text>
-        <TextInput
-          keyboardType="number-pad"
-          maxLength={6}
-          onChangeText={setOtpCode}
-          placeholder="000000"
-          style={styles.otpInput}
-          value={otpCode}
-        />
-      </View>
+    void acceptInvite();
+  }, [canAcceptInvite, isAccepting]);
 
-      <Pressable
-        disabled={isWorking || otpCode.trim().length !== 6}
-        onPress={() => {
-          void verifyOtpAndAccept();
-        }}
-        style={[styles.primaryButton, (isWorking || otpCode.trim().length !== 6) && styles.primaryButtonDisabled]}
-      >
-        {isWorking ? (
-          <ActivityIndicator color="#ffffff" />
-        ) : (
-          <Text style={styles.primaryButtonText}>Verify and accept invite</Text>
-        )}
-      </Pressable>
+  function handleAuthSuccess(result: { email: string; emailVerified: boolean }): Promise<void> | void
+  {
+    if (result.emailVerified) {
+      return acceptInvite();
+    }
 
-      <Pressable
-        disabled={!canResendOtp}
-        onPress={() => {
-          void resendOtp();
-        }}
-        style={[styles.secondaryButton, !canResendOtp && styles.secondaryButtonDisabled]}
-      >
-        <Text style={styles.secondaryButtonText}>
-          {cooldownRemaining > 0 ? `Resend in ${cooldownRemaining}s` : "Resend code"}
-        </Text>
-      </Pressable>
-    </View>
-  );
+    setNeedsVerification(true);
+  }
 
   if (!inviteToken) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.card}>
           <Text style={styles.title}>Invalid invite</Text>
-          <Text style={styles.sectionBody}>This invite link is missing a token or has already been used.</Text>
+          <Text style={styles.subtitle}>This invite link is missing a valid token.</Text>
+          <Pressable onPress={() => router.replace("/(auth)/login" as Href)}>
+            <Text style={styles.footerLink}>Go to login</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (needsVerification || (session && !emailVerified)) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.card}>
+          <Text style={styles.title}>Verify to continue</Text>
+          <Text style={styles.subtitle}>Complete email verification to accept this invite.</Text>
+          <EmailOtpVerificationForm onVerified={acceptInvite} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (session && emailVerified) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.card}>
+          <Text style={styles.title}>Accepting invite...</Text>
+          <Text style={styles.subtitle}>Please wait while we add you to the organization.</Text>
+          {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
         </View>
       </SafeAreaView>
     );
@@ -262,20 +146,59 @@ export default function JoinScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.contentContainer} keyboardShouldPersistTaps="handled">
-        <View style={styles.card}>
-          <Text style={styles.kicker}>TuitionIQ</Text>
-          <Text style={styles.title}>Join your organization</Text>
-          <Text style={styles.subtitle}>
-            Complete sign in, verify your email if needed, and accept your invitation.
-          </Text>
+      <View style={styles.card}>
+        <Text style={styles.title}>Join TuitionIQ</Text>
+        <Text style={styles.subtitle}>Use the invited email to continue.</Text>
 
-          {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
-          {infoMessage ? <Text style={styles.infoText}>{infoMessage}</Text> : null}
+        {inviteEmail ? <Text style={styles.emailHint}>Invite email: {inviteEmail}</Text> : null}
 
-          {stage === "otp" ? renderOtpStep() : renderAuthenticationStep()}
+        <View style={styles.switchRow}>
+          {isModeLocked ? (
+            <Text style={styles.modeHint}>
+              {resolvedMode === "login"
+                ? "We found an existing account for this email. Please log in."
+                : "No account found for this email. Please sign up first."}
+            </Text>
+          ) : (
+            <>
+              <Pressable
+                onPress={() => setMode("login")}
+                style={[styles.switchButton, resolvedMode === "login" && styles.switchButtonActive]}
+              >
+                <Text style={[styles.switchText, resolvedMode === "login" && styles.switchTextActive]}>I have an account</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setMode("signup")}
+                style={[styles.switchButton, resolvedMode === "signup" && styles.switchButtonActive]}
+              >
+                <Text style={[styles.switchText, resolvedMode === "signup" && styles.switchTextActive]}>I need an account</Text>
+              </Pressable>
+            </>
+          )}
         </View>
-      </ScrollView>
+
+        {isCheckingAccount ? (
+          <Text style={styles.checkingText}>Checking invite account status...</Text>
+        ) : null}
+
+        {resolvedMode === "login" ? (
+          <LoginForm
+            initialEmail={inviteEmail ?? undefined}
+            emailReadOnly={!!inviteEmail}
+            hideSignUpLink
+            onSuccess={handleAuthSuccess}
+          />
+        ) : (
+          <SignUpForm
+            initialEmail={inviteEmail ?? undefined}
+            emailReadOnly={!!inviteEmail}
+            hideLoginLink
+            onSuccess={handleAuthSuccess}
+          />
+        )}
+
+        {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+      </View>
     </SafeAreaView>
   );
 }
@@ -283,163 +206,76 @@ export default function JoinScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f3f7fa",
-  },
-  contentContainer: {
-    flexGrow: 1,
+    backgroundColor: "#f1f5f9",
     justifyContent: "center",
     padding: 20,
   },
   card: {
     backgroundColor: "#ffffff",
-    borderRadius: 20,
-    padding: 20,
-    gap: 12,
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.08,
-    shadowRadius: 18,
-    elevation: 3,
-  },
-  kicker: {
-    fontSize: 12,
-    fontWeight: "700",
-    letterSpacing: 1.1,
-    color: "#0d9488",
-    textTransform: "uppercase",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    padding: 16,
+    gap: 10,
   },
   title: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: "700",
-    color: "#0e3050",
+    color: "#0f172a",
   },
   subtitle: {
     fontSize: 14,
-    color: "#35556d",
-    lineHeight: 20,
-  },
-  sectionBlock: {
-    gap: 10,
-  },
-  sectionTitle: {
-    fontSize: 17,
-    fontWeight: "700",
-    color: "#0f172a",
-  },
-  sectionBody: {
-    fontSize: 14,
     color: "#475569",
-    lineHeight: 20,
   },
-  modeSwitchRow: {
+  emailHint: {
+    fontSize: 13,
+    color: "#0f766e",
+    fontWeight: "600",
+  },
+  switchRow: {
     flexDirection: "row",
     gap: 8,
   },
-  modeSwitchButton: {
+  switchButton: {
     flex: 1,
     borderWidth: 1,
-    borderColor: "#dbeafe",
+    borderColor: "#cbd5e1",
     borderRadius: 10,
     paddingVertical: 8,
-    paddingHorizontal: 10,
     alignItems: "center",
   },
-  modeSwitchActive: {
-    borderColor: "#0e7ef2",
+  switchButtonActive: {
+    borderColor: "#1d4ed8",
     backgroundColor: "#eff6ff",
   },
-  modeSwitchText: {
+  switchText: {
     fontSize: 12,
     color: "#475569",
-    textAlign: "center",
+    fontWeight: "600",
   },
-  modeSwitchTextActive: {
+  switchTextActive: {
     color: "#1d4ed8",
-    fontWeight: "700",
   },
-  fieldBlock: {
-    gap: 6,
-  },
-  label: {
-    fontSize: 13,
+  modeHint: {
+    flex: 1,
+    color: "#1d4ed8",
+    fontSize: 12,
     fontWeight: "600",
-    color: "#334155",
+    textAlign: "center",
+    paddingVertical: 4,
   },
-  input: {
-    borderWidth: 1,
-    borderColor: "#c5d6e4",
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: "#0f172a",
-    backgroundColor: "#ffffff",
-  },
-  readOnlyInput: {
-    backgroundColor: "#f8fafc",
+  checkingText: {
     color: "#475569",
-  },
-  otpInput: {
-    borderWidth: 1,
-    borderColor: "#c5d6e4",
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 20,
-    letterSpacing: 4,
-    color: "#0f172a",
-    backgroundColor: "#ffffff",
+    fontSize: 12,
     textAlign: "center",
-  },
-  primaryButton: {
-    marginTop: 4,
-    backgroundColor: "#0e7ef2",
-    borderRadius: 12,
-    paddingVertical: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 48,
-  },
-  primaryButtonDisabled: {
-    opacity: 0.5,
-  },
-  primaryButtonText: {
-    color: "#ffffff",
-    fontSize: 16,
-    fontWeight: "600",
-    textAlign: "center",
-  },
-  secondaryButton: {
-    borderWidth: 1,
-    borderColor: "#0e7ef2",
-    borderRadius: 12,
-    paddingVertical: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 48,
-  },
-  secondaryButtonDisabled: {
-    opacity: 0.5,
-  },
-  secondaryButtonText: {
-    color: "#0e7ef2",
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  inlineLinkWrap: {
-    alignSelf: "flex-start",
-  },
-  inlineLink: {
-    color: "#0d9488",
-    fontSize: 13,
-    fontWeight: "600",
   },
   errorText: {
-    color: "#bb1f1f",
-    fontSize: 14,
+    color: "#b91c1c",
+    fontSize: 13,
   },
-  infoText: {
-    color: "#0f766e",
+  footerLink: {
+    textAlign: "center",
+    color: "#475569",
     fontSize: 14,
   },
 });

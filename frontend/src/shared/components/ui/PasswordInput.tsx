@@ -1,3 +1,4 @@
+import { Ionicons } from "@expo/vector-icons";
 import { useMemo, useState } from "react";
 import {
   Pressable,
@@ -7,39 +8,43 @@ import {
   type TextInputProps,
   View,
 } from "react-native";
+import { PasswordStrengthMeter } from "@/src/shared/components/ui/PasswordStrengthMeter";
 
-type PasswordInputProps = Omit<TextInputProps, "secureTextEntry"> & {
+type PasswordInputProps = TextInputProps & {
   label: string;
-  errorMessage?: string | null;
+  showStrength?: boolean;
 };
 
-export function PasswordInput({ label, errorMessage, style, ...props }: PasswordInputProps) {
+export function PasswordInput({ label, showStrength = false, value, style, ...props }: PasswordInputProps)
+{
   const [isVisible, setIsVisible] = useState(false);
 
-  const toggleLabel = useMemo(() => (isVisible ? "Hide" : "Show"), [isVisible]);
+  const iconName = useMemo(() => (isVisible ? "eye-off" : "eye"), [isVisible]);
+  const passwordValue = typeof value === "string" ? value : "";
 
   return (
     <View style={styles.wrapper}>
       <Text style={styles.label}>{label}</Text>
-      <View style={[styles.inputWrap, errorMessage ? styles.inputWrapError : null]}>
+      <View style={styles.inputRow}>
         <TextInput
           {...props}
+          value={value}
+          style={[styles.input, style]}
+          secureTextEntry={!isVisible}
           autoCapitalize="none"
           autoCorrect={false}
-          secureTextEntry={!isVisible}
-          style={[styles.input, style]}
         />
         <Pressable
+          accessibilityLabel={isVisible ? "Hide password" : "Show password"}
           accessibilityRole="button"
-          onPress={() => {
-            setIsVisible((current) => !current);
-          }}
-          style={styles.toggleButton}
+          onPress={() => setIsVisible((current) => !current)}
+          style={styles.iconButton}
         >
-          <Text style={styles.toggleText}>{toggleLabel}</Text>
+          <Ionicons color="#475569" name={iconName} size={20} />
         </Pressable>
       </View>
-      {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+
+      {showStrength ? <PasswordStrengthMeter password={passwordValue} /> : null}
     </View>
   );
 }
@@ -53,16 +58,13 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#334155",
   },
-  inputWrap: {
+  inputRow: {
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1,
     borderColor: "#cbd5e1",
     borderRadius: 12,
     backgroundColor: "#ffffff",
-  },
-  inputWrapError: {
-    borderColor: "#ef4444",
   },
   input: {
     flex: 1,
@@ -71,17 +73,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#0f172a",
   },
-  toggleButton: {
+  iconButton: {
     paddingHorizontal: 12,
     paddingVertical: 8,
-  },
-  toggleText: {
-    color: "#1d4ed8",
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  errorText: {
-    fontSize: 13,
-    color: "#b91c1c",
   },
 });

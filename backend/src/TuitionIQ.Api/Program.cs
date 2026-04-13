@@ -1,8 +1,9 @@
 using FluentValidation;
 using MediatR;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi;
-using TuitionIQ.Api.Extensions;
+using Microsoft.IdentityModel.Tokens;
 using TuitionIQ.Api.Middleware;
 using TuitionIQ.Application.Common.Behaviors;
 using TuitionIQ.Application.Common.Interfaces;
@@ -18,21 +19,60 @@ builder.Services.AddEndpointsApiExplorer();
 
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
-  // Get the connection string from configuration (e.g. appsettings.json/ environment variables)
   var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException("ConnectionStrings:DefaultConnection is not configured.");
 
-  // Use Npgsql for PostgreSQL database access
   options.UseNpgsql(connectionString);
 });
 
-builder.Services.AddSupabaseJwtAuthentication(builder.Configuration);
+var projectRef = builder.Configuration["Supabase:ProjectRef"];
+if (string.IsNullOrWhiteSpace(projectRef))
+{
+  throw new InvalidOperationException("Supabase:ProjectRef is not configured.");
+}
+
+var issuer = $"https://{projectRef}.supabase.co/auth/v1";
+builder.Services
+  .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+  .AddJwtBearer(options =>
+  {
+    options.Authority = issuer;
+    options.MetadataAddress = $"{issuer}/.well-known/openid-configuration";
+
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+      ValidateIssuerSigningKey = true,
+      ValidateAudience = true,
+      ValidAudience = "authenticated",
+      ValidateIssuer = true,
+      ValidIssuer = issuer,
+      ValidateLifetime = true,
+      ClockSkew = TimeSpan.FromSeconds(30)
+    };
+
+    options.RequireHttpsMetadata = true;
+
+    options.Events = new JwtBearerEvents
+    {
+      OnTokenValidated = context =>
+      {
+        var sub = context.Principal?.FindFirst("sub")?.Value;
+        if (string.IsNullOrWhiteSpace(sub))
+        {
+          context.Fail("Missing required 'sub' claim.");
+        }
+
+        return Task.CompletedTask;
+      }
+    };
+  });
 
 builder.Services.AddAuthorization();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IAppDbContext>(serviceProvider => serviceProvider.GetRequiredService<AppDbContext>());
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddScoped<IAuditLogService, AuditLogService>();
+builder.Services.AddHttpClient<ISupabaseAdminClient, SupabaseAdminClient>();
 
 builder.Services.AddMediatR(configuration => configuration.RegisterServicesFromAssembly(applicationAssembly));
 builder.Services.AddValidatorsFromAssembly(applicationAssembly);
@@ -98,7 +138,7 @@ app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 app.UseCors("ExpoWebPolicy");  // Adds CORS headers so browsers allow requests from approved frontend origins
 
-app.UseMiddleware<OriginValidationMiddleware>();  
+app.UseMiddleware<OriginValidationMiddleware>();
 // Optional security layer to validate request origin (extra protection beyond CORS, e.g. CSRF hardening)
 
 app.UseAuthentication();  // Identifies the user (e.g. validates JWT and sets HttpContext.User)
