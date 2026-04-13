@@ -6,10 +6,15 @@ public sealed class OriginValidationMiddleware
 {
   private readonly RequestDelegate _next;
   private readonly string[] _allowedOrigins;
+  private readonly ILogger<OriginValidationMiddleware> _logger;
 
-  public OriginValidationMiddleware(RequestDelegate next, IConfiguration configuration)
+  public OriginValidationMiddleware(
+    RequestDelegate next,
+    IConfiguration configuration,
+    ILogger<OriginValidationMiddleware> logger)
   {
     _next = next;
+    _logger = logger;
     _allowedOrigins = configuration
       .GetSection("App:AllowedOrigins")
       .Get<string[]>()
@@ -24,6 +29,11 @@ public sealed class OriginValidationMiddleware
 
       if (!string.IsNullOrWhiteSpace(origin) && !IsAllowedOrigin(origin))
       {
+        _logger.LogWarning(
+          "Origin validation blocked request: {Method} {Path} from origin {Origin}",
+          context.Request.Method,
+          context.Request.Path,
+          origin);
         await WriteForbiddenAsync(context, origin);
         return;
       }

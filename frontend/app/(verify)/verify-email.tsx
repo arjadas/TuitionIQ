@@ -5,6 +5,8 @@ import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  AppState,
+  type AppStateStatus,
   Pressable,
   SafeAreaView,
   StyleSheet,
@@ -85,6 +87,29 @@ export default function VerifyEmailScreen() {
       }
     })();
   }, [refreshEmailVerificationStatus, router, sendCode]);
+
+  useEffect(() => {
+    const appStateSubscription = AppState.addEventListener("change", (state: AppStateStatus) => {
+      if (state !== "active") {
+        return;
+      }
+
+      void (async () => {
+        try {
+          const isVerified = await refreshEmailVerificationStatus();
+          if (isVerified) {
+            router.replace("/home");
+          }
+        } catch {
+          // Keep user on the verification screen when status refresh fails.
+        }
+      })();
+    });
+
+    return () => {
+      appStateSubscription.remove();
+    };
+  }, [refreshEmailVerificationStatus, router]);
 
   const verify = async (): Promise<void> => {
     setIsVerifying(true);

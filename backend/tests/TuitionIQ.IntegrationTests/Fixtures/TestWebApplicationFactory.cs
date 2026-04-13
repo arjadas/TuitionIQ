@@ -15,7 +15,6 @@ public sealed class TestWebApplicationFactory : WebApplicationFactory<Program>
 {
   private readonly string _databaseName = $"tuitioniq-tests-{Guid.NewGuid():N}";
 
-  public string JwtSecret { get; } = "integration-tests-supabase-jwt-secret-1234567890";
   public string ProjectRef { get; } = "integration-tests";
 
   protected override IHost CreateHost(IHostBuilder builder)
@@ -27,7 +26,6 @@ public sealed class TestWebApplicationFactory : WebApplicationFactory<Program>
       configurationBuilder.AddInMemoryCollection(new Dictionary<string, string?>
       {
         ["ConnectionStrings:DefaultConnection"] = "Host=localhost;Database=unused;Username=unused;Password=unused",
-        ["Supabase:JwtSecret"] = JwtSecret,
         ["Supabase:ProjectRef"] = ProjectRef
       });
     });

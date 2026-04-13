@@ -1,4 +1,4 @@
-export const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/;
+export const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*]).{8,}$/;
 
 type PasswordChecks = {
   minLength: boolean;
@@ -20,7 +20,7 @@ export function validatePassword(password: string): PasswordValidationResult {
     uppercase: /[A-Z]/.test(password),
     lowercase: /[a-z]/.test(password),
     digit: /\d/.test(password),
-    special: /[^A-Za-z\d]/.test(password),
+    special: /[!@#$%^&*]/.test(password),
   };
 
   const score = Object.values(checks).filter(Boolean).length;

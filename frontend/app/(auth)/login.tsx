@@ -51,7 +51,7 @@ export default function LoginScreen() {
     if (error) {
       if (isInvalidCredentialsError(error.message)) {
         setFailedAttempts((current) => current + 1);
-        setErrorMessage("Email or password is incorrect. Try again.");
+        setErrorMessage("Incorrect email or password.");
       } else {
         setErrorMessage(error.message || "No internet connection. Check your connection and try again.");
       }
@@ -70,10 +70,12 @@ export default function LoginScreen() {
     try {
       const isVerified = await refreshEmailVerificationStatus();
       router.replace((isVerified ? "/home" : "/(verify)/verify-email") as Href);
-    } catch {
-      router.replace("/(verify)/verify-email" as Href);
-    } finally {
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Could not verify your email. Try again or restart the app.";
+      console.error("[auth/login] Email verification check failed:", errorMessage);
+      setErrorMessage(errorMessage);
       setIsSubmitting(false);
+      return;
     }
   };
 

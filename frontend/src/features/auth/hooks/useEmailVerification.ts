@@ -5,7 +5,23 @@ import { useAuthStore } from "@/src/store/authStore";
 
 type ApiErrorResponse = {
   code?: string;
+  detail?: string;
+  message?: string;
+  title?: string;
 };
+
+function debugAuthVerification(message: string, payload?: unknown): void {
+  if (!__DEV__) {
+    return;
+  }
+
+  if (payload === undefined) {
+    console.log("[auth/verification]", message);
+    return;
+  }
+
+  console.log("[auth/verification]", message, payload);
+}
 
 function isEmailNotVerifiedResponse(error: unknown): boolean {
   if (!(error instanceof AxiosError)) {
@@ -13,7 +29,53 @@ function isEmailNotVerifiedResponse(error: unknown): boolean {
   }
 
   const code = (error.response?.data as ApiErrorResponse | undefined)?.code;
-  return error.response?.status === 403 && code === "EMAIL_NOT_VERIFIED";
+  if (error.response?.status !== 403) {
+    return false;
+  }
+
+  if (code === "EMAIL_NOT_VERIFIED") {
+    return true;
+  }
+
+  if (code) {
+    return false;
+  }
+
+  // Some reverse proxies/middleware stacks return an empty 403 body.
+  // For /api/users/me in the login-to-verify flow, treat this as unverified fallback.
+  const requestUrl = error.config?.url;
+  return requestUrl === "/api/users/me";
+}
+
+function isInvalidRefreshTokenError(errorMessage: string | null | undefined): boolean {
+  if (!errorMessage) {
+    return false;
+  }
+
+  return errorMessage.toLowerCase().includes("invalid refresh token");
+}
+
+function getVerificationErrorMessage(error: unknown, fallbackMessage: string): string {
+  if (error instanceof AxiosError) {
+    const responseData = error.response?.data as ApiErrorResponse | undefined;
+    if (responseData?.detail && responseData.detail.trim().length > 0) {
+      return responseData.detail;
+    }
+
+    if (responseData?.message && responseData.message.trim().length > 0) {
+      return responseData.message;
+    }
+
+    if (responseData?.title && responseData.title.trim().length > 0) {
+      return responseData.title;
+    }
+  }
+
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+
+  return fallbackMessage;
 }
 
 function getSessionEmail(email: string | null | undefined): string {
@@ -25,58 +87,89 @@ function getSessionEmail(email: string | null | undefined): string {
 }
 
 export function useEmailVerification() {
-  const sessionEmail = useAuthStore((state) => state.session?.user?.email);
   const setEmailVerified = useAuthStore((state) => state.setEmailVerified);
+  const clearAuth = useAuthStore((state) => state.clearAuth);
 
-  const getActiveSessionEmail = async (): Promise<string> => {
+  const getValidatedSession = async (): Promise<Awaited<ReturnType<typeof authService.getSession>>["data"]["session"]> => {
     const {
       data: { session },
       error,
     } = await authService.getSession();
 
-    if (error) {
-      throw new Error(error.message || "Could not load your session.");
+    if (!error) {
+      return session;
     }
 
-    return getSessionEmail(session?.user?.email ?? sessionEmail);
+    debugAuthVerification("supabase.getSession failed", { message: error.message });
+
+    if (isInvalidRefreshTokenError(error.message)) {
+      await authService.signOut();
+      clearAuth();
+      throw new Error("Your session expired. Please sign in again.");
+    }
+
+    throw new Error(error.message || "Could not load your session.");
+  };
+
+  const getActiveSessionEmail = async (): Promise<string> => {
+    const session = await getValidatedSession();
+    const storeSessionEmail = useAuthStore.getState().session?.user?.email;
+
+    const email = getSessionEmail(session?.user?.email ?? storeSessionEmail);
+    debugAuthVerification("resolved active session email", { email });
+    return email;
   };
 
   const refreshEmailVerificationStatus = async (): Promise<boolean> => {
-    const {
-      data: { session },
-      error,
-    } = await authService.getSession();
-
-    if (error) {
-      throw new Error(error.message || "Could not refresh your session.");
-    }
+    const session = await getValidatedSession();
 
     if (!session) {
+      debugAuthVerification("no active session while refreshing email verification status");
       setEmailVerified(false);
       return false;
     }
 
     try {
+      debugAuthVerification("requesting /api/users/me for email verification status");
       const profile = await usersApiClient.getCurrentUserProfile();
       setEmailVerified(profile.emailVerified);
+      debugAuthVerification("received email verification status", { emailVerified: profile.emailVerified });
       return profile.emailVerified;
     } catch (error) {
       if (isEmailNotVerifiedResponse(error)) {
+        debugAuthVerification("backend reported EMAIL_NOT_VERIFIED");
         setEmailVerified(false);
         return false;
       }
 
-      throw error;
+      const errorMessage = getVerificationErrorMessage(error, "Could not load your profile.");
+      debugAuthVerification("failed to refresh email verification status", { message: errorMessage });
+      
+      // Log the full error details for debugging
+      if (error instanceof AxiosError && __DEV__) {
+        console.error("[auth/verification] API error:", {
+          status: error.response?.status,
+          code: (error.response?.data as { code?: string } | undefined)?.code,
+          message: error.message,
+          url: error.config?.url,
+        });
+      }
+      
+      throw new Error(errorMessage);
     }
   };
 
   const sendVerificationOtp = async (): Promise<void> => {
     const email = await getActiveSessionEmail();
+    debugAuthVerification("sending verification OTP", { email });
     const { error } = await authService.sendVerificationOtp(email);
 
     if (error) {
+      debugAuthVerification("sendVerificationOtp failed", { message: error.message });
       throw new Error(error.message || "Could not send the verification code.");
     }
+
+    debugAuthVerification("verification OTP sent");
   };
 
   const verifyEmailOtp = async (otpCode: string): Promise<void> => {
@@ -87,22 +180,34 @@ export function useEmailVerification() {
       throw new Error("Enter the 6-digit verification code.");
     }
 
+    debugAuthVerification("verifying OTP", { email });
     const { error: otpError } = await authService.verifyEmailOtp(email, token);
     if (otpError) {
+      debugAuthVerification("verifyEmailOtp failed", { message: otpError.message });
       throw new Error(otpError.message || "The code is invalid or expired.");
     }
 
     const { error: refreshError } = await authService.getSession();
     if (refreshError) {
+      debugAuthVerification("session refresh after OTP failed", { message: refreshError.message });
       throw new Error(refreshError.message || "Could not refresh your session.");
     }
 
     const isAlreadyVerified = await refreshEmailVerificationStatus();
     if (!isAlreadyVerified) {
-      await usersApiClient.markEmailVerified();
+      try {
+        debugAuthVerification("calling PATCH /api/users/email-verification");
+        await usersApiClient.markEmailVerified();
+        debugAuthVerification("email verification marked in backend");
+      } catch (error) {
+        const message = getVerificationErrorMessage(error, "Could not complete email verification.");
+        debugAuthVerification("markEmailVerified failed", { message });
+        throw new Error(message);
+      }
     }
 
     setEmailVerified(true);
+    debugAuthVerification("email verification flow completed");
   };
 
   return {

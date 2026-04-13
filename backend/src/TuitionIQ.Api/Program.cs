@@ -40,11 +40,21 @@ builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBeh
 
 builder.Services.AddCors(options =>
 {
+  var allowedOrigins = builder.Configuration
+    .GetSection("App:AllowedOrigins")
+    .Get<string[]>()
+    ?? Array.Empty<string>();
+
+  var corsOrigins = allowedOrigins
+    .Where(origin => origin.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+      || origin.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+    .ToArray();
+
   options.AddPolicy("ExpoWebPolicy", policy =>
   {
-    policy.WithOrigins("http://localhost:8081", "https://tuitioniq.pages.dev")
-          .AllowAnyHeader()
-          .AllowAnyMethod();
+    policy.WithOrigins(corsOrigins)
+      .AllowAnyHeader()
+      .AllowAnyMethod();
   });
 });
 

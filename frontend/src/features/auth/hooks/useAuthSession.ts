@@ -20,7 +20,16 @@ function isEmailNotVerifiedResponse(error: unknown): boolean {
   }
 
   const code = (error.response?.data as ApiErrorResponse | undefined)?.code;
-  return error.response?.status === 403 && code === "EMAIL_NOT_VERIFIED";
+  if (error.response?.status !== 403) {
+    return false;
+  }
+
+  if (code === "EMAIL_NOT_VERIFIED") {
+    return true;
+  }
+
+  const requestUrl = error.config?.url;
+  return requestUrl === "/api/users/me";
 }
 
 function isAccountSuspendedResponse(error: unknown): boolean {
@@ -30,6 +39,14 @@ function isAccountSuspendedResponse(error: unknown): boolean {
 
   const code = (error.response?.data as ApiErrorResponse | undefined)?.code;
   return error.response?.status === 403 && code === "ACCOUNT_SUSPENDED";
+}
+
+function isInvalidRefreshTokenError(errorMessage: string | null | undefined): boolean {
+  if (!errorMessage) {
+    return false;
+  }
+
+  return errorMessage.toLowerCase().includes("invalid refresh token");
 }
 
 export function useAuthSession(options: UseAuthSessionOptions = {}): void {
@@ -93,7 +110,26 @@ export function useAuthSession(options: UseAuthSessionOptions = {}): void {
     void (async () => {
       const {
         data: { session },
+        error,
       } = await authService.getSession();
+
+      if (error) {
+        console.log("[auth/session] getSession failed", { message: error.message });
+
+        if (isInvalidRefreshTokenError(error.message)) {
+          await authService.signOut();
+          if (isMounted) {
+            clearAuth();
+            setInitialised(true);
+          }
+          return;
+        }
+
+        if (isMounted) {
+          setInitialised(true);
+        }
+        return;
+      }
 
       applySessionState(session);
       await syncEmailVerification(session);
@@ -106,6 +142,9 @@ export function useAuthSession(options: UseAuthSessionOptions = {}): void {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
+      
+      console.log("[auth/session] onAuthStateChange", { event, hasSession: Boolean(session) });
+
       applySessionState(session);
 
       if (event === "PASSWORD_RECOVERY") {

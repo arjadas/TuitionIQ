@@ -53,7 +53,11 @@ export default function ForgotPasswordScreen() {
     setErrorMessage(null);
     setIsSubmitting(true);
 
-    await authService.resetPasswordForEmail(normalizedEmail);
+    const { error } = await authService.resetPasswordForEmail(normalizedEmail);
+
+    if (error) {
+      console.log("[auth/forgot-password] resetPasswordForEmail returned", { message: error.message });
+    }
 
     setInfoMessage("If an account exists for this email, a password reset link has been sent.");
     setCooldownEndsAt(Date.now() + RESET_COOLDOWN_SECONDS * 1000);

@@ -85,12 +85,18 @@ export const apiClient = axios.create({
 });
 
 apiClient.interceptors.request.use(async (config) => {
-  const {
-    data: { session: supabaseSession },
-  } = await supabase.auth.getSession();
-
   const storeSession = useAuthStore.getState().session;
-  const accessToken = supabaseSession?.access_token ?? storeSession?.access_token;
+  
+  // OPTIMIZATION: Try store session first (already in memory from signIn response)
+  // Only call getSession() if store is empty (to catch token refreshes from supabase)
+  let accessToken: string | undefined = storeSession?.access_token;
+  
+  if (!accessToken) {
+    const {
+      data: { session: supabaseSession },
+    } = await supabase.auth.getSession();
+    accessToken = supabaseSession?.access_token;
+  }
 
   if (accessToken) {
     config.headers = config.headers ?? {};

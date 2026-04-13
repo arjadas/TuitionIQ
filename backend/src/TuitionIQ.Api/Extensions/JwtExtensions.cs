@@ -1,23 +1,26 @@
-using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 
 namespace TuitionIQ.Api.Extensions;
 
 public static class JwtExtensions
 {
+  private const string PlaceholderValue = "__REPLACE_WITH_ENV__";
+
+  private static bool IsMissingOrPlaceholder(string? value)
+  {
+    return string.IsNullOrWhiteSpace(value)
+      || string.Equals(value, PlaceholderValue, StringComparison.Ordinal)
+      || value.Contains("<your-", StringComparison.OrdinalIgnoreCase);
+  }
+
   public static IServiceCollection AddSupabaseJwtAuthentication(this IServiceCollection services, IConfiguration configuration)
   {
-    var jwtSecret = configuration["Supabase:JwtSecret"];
-    if (string.IsNullOrWhiteSpace(jwtSecret))
-    {
-      throw new InvalidOperationException("Supabase:JwtSecret is not configured.");
-    }
-
     var projectRef = configuration["Supabase:ProjectRef"];
-    if (string.IsNullOrWhiteSpace(projectRef))
+    if (IsMissingOrPlaceholder(projectRef))
     {
       throw new InvalidOperationException("Supabase:ProjectRef is not configured.");
     }
@@ -26,16 +29,55 @@ public static class JwtExtensions
       .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
       .AddJwtBearer(options =>
       {
+        var supabaseUrl = $"https://{projectRef!}.supabase.co";
+
+        options.Authority = $"{supabaseUrl}/auth/v1";
+        options.MetadataAddress = $"{supabaseUrl}/auth/v1/.well-known/openid-configuration";
+
         options.TokenValidationParameters = new TokenValidationParameters
         {
           ValidateIssuerSigningKey = true,
-          IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
-          ValidateAudience = true,
           ValidAudience = "authenticated",
+          ValidateAudience = true,
+          ValidIssuer = $"{supabaseUrl}/auth/v1",
           ValidateIssuer = true,
-          ValidIssuer = $"https://{projectRef}.supabase.co/auth/v1",
           ValidateLifetime = true,
           ClockSkew = TimeSpan.FromSeconds(30)
+        };
+
+        options.RequireHttpsMetadata = true;
+
+        options.Events = new JwtBearerEvents
+        {
+          OnAuthenticationFailed = context =>
+          {
+            var logger = context.HttpContext.RequestServices
+              .GetRequiredService<ILoggerFactory>()
+              .CreateLogger("JwtBearer");
+
+            logger.LogWarning(
+              context.Exception,
+              "JWT authentication failed for {Method} {Path}",
+              context.Request.Method,
+              context.Request.Path);
+
+            return Task.CompletedTask;
+          },
+          OnChallenge = context =>
+          {
+            var logger = context.HttpContext.RequestServices
+              .GetRequiredService<ILoggerFactory>()
+              .CreateLogger("JwtBearer");
+
+            logger.LogWarning(
+              "JWT challenge triggered for {Method} {Path}. Error={Error}, Description={Description}",
+              context.Request.Method,
+              context.Request.Path,
+              context.Error,
+              context.ErrorDescription);
+
+            return Task.CompletedTask;
+          }
         };
       });
 

@@ -38,6 +38,10 @@ async function signOut() {
   return supabase.auth.signOut();
 }
 
+async function signOutEverywhere() {
+  return supabase.auth.signOut({ scope: "global" });
+}
+
 async function resetPasswordForEmail(email: string) {
   return supabase.auth.resetPasswordForEmail(email, {
     redirectTo: getResetPasswordRedirectTo(),
@@ -77,6 +81,7 @@ export const authService = {
   signUp,
   signInWithPassword,
   signOut,
+  signOutEverywhere,
   resetPasswordForEmail,
   exchangeCodeForSession,
   updatePassword,

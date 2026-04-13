@@ -4,7 +4,7 @@ import { useAuthStore } from "@/src/store/authStore";
 import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import * as SplashScreen from "expo-splash-screen";
 import { router, Stack, type Href } from "expo-router";
-import { AppState, type AppStateStatus } from "react-native";
+import { AppState, type AppStateStatus, Platform } from "react-native";
 import { useCallback, useEffect, useRef } from "react";
 import { supabase } from "@/src/lib/supabase";
 
@@ -29,6 +29,11 @@ function RootNavigator() {
   });
 
   useEffect(() => {
+    if (Platform.OS === "web") {
+      // Supabase web has built-in auto-refresh; no manual control needed
+      return;
+    }
+
     const startAutoRefresh = (): void => {
       if (isAutoRefreshRunning.current) {
         return;
