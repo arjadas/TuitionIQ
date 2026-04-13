@@ -1,10 +1,12 @@
+using Microsoft.AspNetCore.Mvc;
+
 namespace TuitionIQ.Api.Middleware;
 
 public sealed class OriginValidationMiddleware
 {
   private readonly RequestDelegate _next;
-  private readonly ILogger<OriginValidationMiddleware> _logger;
   private readonly string[] _allowedOrigins;
+  private readonly ILogger<OriginValidationMiddleware> _logger;
 
   public OriginValidationMiddleware(
     RequestDelegate next,
@@ -21,34 +23,20 @@ public sealed class OriginValidationMiddleware
 
   public async Task InvokeAsync(HttpContext context)
   {
-    if (!IsMutatingMethod(context.Request.Method))
+    if (IsMutatingMethod(context.Request.Method))
     {
-      await _next(context);
-      return;
-    }
+      var origin = context.Request.Headers.Origin.ToString();
 
-    var origin = context.Request.Headers.Origin.ToString();
-    if (string.IsNullOrWhiteSpace(origin))
-    {
-      await _next(context);
-      return;
-    }
-
-    if (!IsAllowedOrigin(origin))
-    {
-      _logger.LogWarning(
-        "Blocked state-mutating request from disallowed origin {Origin} ({Method} {Path})",
-        origin,
-        context.Request.Method,
-        context.Request.Path);
-
-      context.Response.StatusCode = StatusCodes.Status403Forbidden;
-      await context.Response.WriteAsJsonAsync(new
+      if (!string.IsNullOrWhiteSpace(origin) && !IsAllowedOrigin(origin))
       {
-        code = "ORIGIN_NOT_ALLOWED",
-        message = "The request origin is not allowed."
-      });
-      return;
+        _logger.LogWarning(
+          "Origin validation blocked request: {Method} {Path} from origin {Origin}",
+          context.Request.Method,
+          context.Request.Path,
+          origin);
+        await WriteForbiddenAsync(context, origin);
+        return;
+      }
     }
 
     await _next(context);
@@ -64,24 +52,28 @@ public sealed class OriginValidationMiddleware
 
   private bool IsAllowedOrigin(string origin)
   {
-    var normalizedOrigin = NormalizeOrigin(origin);
-
     return _allowedOrigins
-      .Where(static value => !string.IsNullOrWhiteSpace(value))
-      .Select(NormalizeOrigin)
-      .Any(allowed => normalizedOrigin.Equals(allowed, StringComparison.OrdinalIgnoreCase));
+      .Where(static allowed => !string.IsNullOrWhiteSpace(allowed))
+      .Any(allowed => origin.StartsWith(allowed, StringComparison.OrdinalIgnoreCase));
   }
 
-  private static string NormalizeOrigin(string origin)
+  private static async Task WriteForbiddenAsync(HttpContext context, string origin)
   {
-    var trimmed = origin.Trim();
-
-    if (trimmed.EndsWith("/", StringComparison.Ordinal)
-        && !trimmed.EndsWith("://", StringComparison.Ordinal))
+    if (context.Response.HasStarted)
     {
-      return trimmed.TrimEnd('/');
+      return;
     }
 
-    return trimmed;
+    context.Response.StatusCode = StatusCodes.Status403Forbidden;
+
+    var problem = new ProblemDetails
+    {
+      Status = StatusCodes.Status403Forbidden,
+      Title = "Forbidden",
+      Detail = $"The request origin '{origin}' is not allowed.",
+      Type = "https://httpstatuses.com/403"
+    };
+
+    await context.Response.WriteAsJsonAsync(problem);
   }
 }

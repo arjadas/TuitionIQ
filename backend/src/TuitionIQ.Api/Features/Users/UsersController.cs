@@ -23,9 +23,9 @@ public sealed class UsersController : ControllerBase
   }
 
   [HttpGet("me")]
-  public async Task<ActionResult<UserProfileDto>> GetMe(CancellationToken cancellationToken)
+  public async Task<ActionResult<UserProfileDto>> GetCurrentUser(CancellationToken cancellationToken)
   {
-    var result = await _mediator.Send(new GetUserProfileQuery(_currentUserService.GetUserId()), cancellationToken);
+    var result = await _mediator.Send(new GetCurrentUserQuery(_currentUserService.UserId), cancellationToken);
     return Ok(result);
   }
 
@@ -35,11 +35,7 @@ public sealed class UsersController : ControllerBase
     CancellationToken cancellationToken)
   {
     var result = await _mediator.Send(
-      new UpdateProfileCommand(
-        _currentUserService.GetUserId(),
-        request.FirstName,
-        request.LastName,
-        request.Phone),
+      new UpdateProfileCommand(_currentUserService.UserId, request.FirstName, request.LastName, request.Phone),
       cancellationToken);
 
     return Ok(result);
@@ -48,7 +44,7 @@ public sealed class UsersController : ControllerBase
   [HttpPatch("email-verification")]
   public async Task<IActionResult> VerifyEmail(CancellationToken cancellationToken)
   {
-    await _mediator.Send(new VerifyEmailCommand(_currentUserService.GetUserId()), cancellationToken);
+    await _mediator.Send(new VerifyEmailCommand(_currentUserService.UserId), cancellationToken);
     return Ok();
   }
 }

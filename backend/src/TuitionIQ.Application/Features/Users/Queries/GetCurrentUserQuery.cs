@@ -3,7 +3,7 @@ using TuitionIQ.Application.Common.Exceptions;
 using TuitionIQ.Application.Common.Interfaces;
 using TuitionIQ.Application.Features.Users.Dtos;
 
-namespace TuitionIQ.Application.Features.Auth.Queries;
+namespace TuitionIQ.Application.Features.Users.Queries;
 
 public sealed record GetCurrentUserQuery(Guid UserId) : IRequest<UserProfileDto>;
 
@@ -18,7 +18,7 @@ public sealed class GetCurrentUserQueryHandler : IRequestHandler<GetCurrentUserQ
 
   public async Task<UserProfileDto> Handle(GetCurrentUserQuery request, CancellationToken cancellationToken)
   {
-    IQueryable<UserProfileDto> query = _dbContext.Users
+    IQueryable<UserProfileDto> profileQuery = _dbContext.Users
       .Where(user => user.Id == request.UserId)
       .Select(user => new UserProfileDto
       {
@@ -31,7 +31,7 @@ public sealed class GetCurrentUserQueryHandler : IRequestHandler<GetCurrentUserQ
         EmailVerified = user.EmailVerified
       });
 
-    var profile = await _dbContext.FirstOrDefaultAsync(query, cancellationToken);
+    var profile = await _dbContext.FirstOrDefaultAsync(profileQuery, cancellationToken);
     if (profile is null)
     {
       throw new NotFoundException($"User with id '{request.UserId}' was not found.");

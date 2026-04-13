@@ -7,8 +7,7 @@ using TuitionIQ.Domain.Entities;
 
 namespace TuitionIQ.Application.Features.Users.Commands;
 
-public sealed record UpdateProfileCommand(Guid UserId, string FirstName, string LastName, string? Phone)
-  : IRequest<UserProfileDto>;
+public sealed record UpdateProfileCommand(Guid UserId, string FirstName, string LastName, string? Phone) : IRequest<UserProfileDto>;
 
 public sealed class UpdateProfileCommandValidator : AbstractValidator<UpdateProfileCommand>
 {
@@ -50,11 +49,6 @@ public sealed class UpdateProfileCommandHandler : IRequestHandler<UpdateProfileC
       throw new NotFoundException($"User with id '{request.UserId}' was not found.");
     }
 
-    var updatedAt = DateTimeOffset.UtcNow;
-    var firstName = request.FirstName.Trim();
-    var lastName = request.LastName.Trim();
-    var phone = string.IsNullOrWhiteSpace(request.Phone) ? null : request.Phone.Trim();
-
     var oldValues = new Dictionary<string, object?>
     {
       ["first_name"] = user.FirstName,
@@ -62,9 +56,14 @@ public sealed class UpdateProfileCommandHandler : IRequestHandler<UpdateProfileC
       ["phone"] = user.Phone
     };
 
-    user.FirstName = firstName;
-    user.LastName = lastName;
-    user.Phone = phone;
+    var normalizedFirstName = (request.FirstName ?? string.Empty).Trim();
+    var normalizedLastName = (request.LastName ?? string.Empty).Trim();
+    var normalizedPhone = string.IsNullOrWhiteSpace(request.Phone) ? null : request.Phone.Trim();
+    var updatedAt = DateTimeOffset.UtcNow;
+
+    user.FirstName = normalizedFirstName;
+    user.LastName = normalizedLastName;
+    user.Phone = normalizedPhone;
     user.UpdatedAt = updatedAt;
 
     _auditLogService.Add(new AuditLog(Guid.NewGuid(), "user.profile.updated", "users", updatedAt)
@@ -74,9 +73,9 @@ public sealed class UpdateProfileCommandHandler : IRequestHandler<UpdateProfileC
       OldValues = oldValues,
       NewValues = new Dictionary<string, object?>
       {
-        ["first_name"] = firstName,
-        ["last_name"] = lastName,
-        ["phone"] = phone
+        ["first_name"] = normalizedFirstName,
+        ["last_name"] = normalizedLastName,
+        ["phone"] = normalizedPhone
       }
     });
 

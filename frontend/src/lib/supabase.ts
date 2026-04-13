@@ -1,10 +1,11 @@
 import "react-native-url-polyfill/auto";
 import * as SecureStore from "expo-secure-store";
-import { createClient, type SupportedStorage } from "@supabase/supabase-js";
 import { Platform } from "react-native";
+import { createClient, type SupportedStorage } from "@supabase/supabase-js";
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+// ! means that this value is guaranteed to be defined.
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
 
 if (!supabaseUrl) {
   throw new Error("Missing EXPO_PUBLIC_SUPABASE_URL.");
@@ -14,74 +15,75 @@ if (!supabaseAnonKey) {
   throw new Error("Missing EXPO_PUBLIC_SUPABASE_ANON_KEY.");
 }
 
-type BrowserStorage = {
+type BasicWebStorage = {
   getItem: (key: string) => string | null;
   setItem: (key: string, value: string) => void;
   removeItem: (key: string) => void;
 };
 
-const secureStoreChunkSize = 1800;
-const secureStoreChunkCountSuffix = "__chunk_count";
-const secureStoreChunkSuffix = "__chunk_";
+const webStorage = (globalThis as { localStorage?: BasicWebStorage }).localStorage;
+const isBrowserWeb = Platform.OS === "web" && !!webStorage;
+const SECURE_STORE_CHUNK_SIZE = 1800;
+const SECURE_STORE_META_SUFFIX = "__chunk_count";
+const SECURE_STORE_CHUNK_SUFFIX = "__chunk_";
 
 function getChunkCountKey(key: string): string {
-  return `${key}${secureStoreChunkCountSuffix}`;
+  return `${key}${SECURE_STORE_META_SUFFIX}`;
 }
 
 function getChunkKey(key: string, index: number): string {
-  return `${key}${secureStoreChunkSuffix}${index}`;
+  return `${key}${SECURE_STORE_CHUNK_SUFFIX}${index}`;
 }
 
 function splitIntoChunks(value: string): string[] {
   const chunks: string[] = [];
 
-  for (let index = 0; index < value.length; index += secureStoreChunkSize) {
-    chunks.push(value.slice(index, index + secureStoreChunkSize));
+  for (let index = 0; index < value.length; index += SECURE_STORE_CHUNK_SIZE) {
+    chunks.push(value.slice(index, index + SECURE_STORE_CHUNK_SIZE));
   }
 
   return chunks;
 }
 
-async function removeChunkedValue(key: string): Promise<void> {
-  const countValue = await SecureStore.getItemAsync(getChunkCountKey(key));
-  const chunkCount = Number.parseInt(countValue ?? "0", 10);
+async function clearChunkedValue(key: string): Promise<void> {
+  const chunkCountValue = await SecureStore.getItemAsync(getChunkCountKey(key));
+  const chunkCount = Number.parseInt(chunkCountValue ?? "0", 10);
 
   if (!Number.isNaN(chunkCount) && chunkCount > 0) {
-    await Promise.all(
-      Array.from({ length: chunkCount }, (_, index) => SecureStore.deleteItemAsync(getChunkKey(key, index))),
-    );
+    const deletions = Array.from({ length: chunkCount }, (_, index) =>
+      SecureStore.deleteItemAsync(getChunkKey(key, index)));
+    await Promise.all(deletions);
   }
 
   await SecureStore.deleteItemAsync(getChunkCountKey(key));
 }
 
 const ExpoSecureStoreAdapter: SupportedStorage = {
-  getItem: async (key): Promise<string | null> => {
+  getItem: async (key: string): Promise<string | null> => {
     const directValue = await SecureStore.getItemAsync(key);
     if (directValue !== null) {
       return directValue;
     }
 
-    const countValue = await SecureStore.getItemAsync(getChunkCountKey(key));
-    const chunkCount = Number.parseInt(countValue ?? "0", 10);
+    const chunkCountValue = await SecureStore.getItemAsync(getChunkCountKey(key));
+    const chunkCount = Number.parseInt(chunkCountValue ?? "0", 10);
     if (Number.isNaN(chunkCount) || chunkCount <= 0) {
       return null;
     }
 
-    const chunks = await Promise.all(
-      Array.from({ length: chunkCount }, (_, index) => SecureStore.getItemAsync(getChunkKey(key, index))),
-    );
-
-    if (chunks.some((value) => value === null)) {
+    const chunkReads = Array.from({ length: chunkCount }, (_, index) =>
+      SecureStore.getItemAsync(getChunkKey(key, index)));
+    const chunks = await Promise.all(chunkReads);
+    if (chunks.some((chunk) => chunk === null)) {
       return null;
     }
 
     return chunks.join("");
   },
-  setItem: async (key, value): Promise<void> => {
-    await removeChunkedValue(key);
+  setItem: async (key: string, value: string): Promise<void> => {
+    await clearChunkedValue(key);
 
-    if (value.length <= secureStoreChunkSize) {
+    if (value.length <= SECURE_STORE_CHUNK_SIZE) {
       await SecureStore.setItemAsync(key, value);
       return;
     }
@@ -91,39 +93,39 @@ const ExpoSecureStoreAdapter: SupportedStorage = {
     const chunks = splitIntoChunks(value);
     await SecureStore.setItemAsync(getChunkCountKey(key), String(chunks.length));
 
-    await Promise.all(chunks.map((chunk, index) => SecureStore.setItemAsync(getChunkKey(key, index), chunk)));
+    const chunkWrites = chunks.map((chunk, index) => SecureStore.setItemAsync(getChunkKey(key, index), chunk));
+    await Promise.all(chunkWrites);
   },
-  removeItem: async (key): Promise<void> => {
-    await removeChunkedValue(key);
+  removeItem: async (key: string): Promise<void> => {
+    await clearChunkedValue(key);
     await SecureStore.deleteItemAsync(key);
   },
 };
 
-const browserLocalStorage =
-  Platform.OS === "web" && typeof globalThis !== "undefined"
-    ? (globalThis as { localStorage?: BrowserStorage }).localStorage
-    : undefined;
-
-const BrowserStorageAdapter: SupportedStorage = {
-  getItem: async (key): Promise<string | null> => browserLocalStorage?.getItem(key) ?? null,
-  setItem: async (key, value): Promise<void> => {
-    browserLocalStorage?.setItem(key, value);
+const WebStorageAdapter: SupportedStorage = {
+  getItem: async (key: string): Promise<string | null> => {
+    return webStorage?.getItem(key) ?? null;
   },
-  removeItem: async (key): Promise<void> => {
-    browserLocalStorage?.removeItem(key);
+  setItem: async (key: string, value: string): Promise<void> => {
+    webStorage?.setItem(key, value);
+  },
+  removeItem: async (key: string): Promise<void> => {
+    webStorage?.removeItem(key);
   },
 };
 
 const NoopStorageAdapter: SupportedStorage = {
-  getItem: async (): Promise<string | null> => null,
+  getItem: async (): Promise<string | null> => {
+    return null;
+  },
   setItem: async (): Promise<void> => {},
   removeItem: async (): Promise<void> => {},
 };
 
 const authStorage: SupportedStorage =
   Platform.OS === "web"
-    ? browserLocalStorage
-      ? BrowserStorageAdapter
+    ? isBrowserWeb
+      ? WebStorageAdapter
       : NoopStorageAdapter
     : ExpoSecureStoreAdapter;
 
@@ -132,6 +134,6 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     storage: authStorage,
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: Platform.OS === "web" && !!browserLocalStorage,
+    detectSessionInUrl: isBrowserWeb,
   },
 });

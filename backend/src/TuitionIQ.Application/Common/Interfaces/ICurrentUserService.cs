@@ -4,6 +4,6 @@ namespace TuitionIQ.Application.Common.Interfaces;
 
 public interface ICurrentUserService
 {
-  Guid GetUserId();
-  IReadOnlyList<OrgClaim> GetOrgClaims();
+  Guid UserId { get; }
+  IReadOnlyList<OrgClaim> OrgClaims { get; }
 }

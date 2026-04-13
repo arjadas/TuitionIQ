@@ -1,24 +1,23 @@
+import * as Linking from "expo-linking";
+import { Platform } from "react-native";
 import { supabase } from "@/src/lib/supabase";
 
 type SignUpInput = {
-  email: string;
-  password: string;
   firstName: string;
   lastName: string;
-};
-
-type SignInInput = {
   email: string;
   password: string;
 };
 
-type VerifyEmailOtpInput = {
-  email: string;
-  token: string;
-};
+function getResetPasswordRedirectTo(): string {
+  if (Platform.OS === "web" && typeof window !== "undefined") {
+    return `${window.location.origin}/reset-password`;
+  }
 
-export async function signUp(input: SignUpInput)
-{
+  return Linking.createURL("/reset-password");
+}
+
+async function signUp(input: SignUpInput) {
   return supabase.auth.signUp({
     email: input.email,
     password: input.password,
@@ -31,38 +30,33 @@ export async function signUp(input: SignUpInput)
   });
 }
 
-export async function signInWithPassword(input: SignInInput)
-{
-  return supabase.auth.signInWithPassword({
-    email: input.email,
-    password: input.password,
-  });
+async function signInWithPassword(email: string, password: string) {
+  return supabase.auth.signInWithPassword({ email, password });
 }
 
-export async function signOut()
-{
+async function signOut() {
   return supabase.auth.signOut();
 }
 
-export async function signOutGlobal()
-{
+async function signOutEverywhere() {
   return supabase.auth.signOut({ scope: "global" });
 }
 
-export async function resetPasswordForEmail(email: string, redirectUrl: string)
-{
+async function resetPasswordForEmail(email: string) {
   return supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: redirectUrl,
+    redirectTo: getResetPasswordRedirectTo(),
   });
 }
 
-export async function updatePassword(newPassword: string)
-{
-  return supabase.auth.updateUser({ password: newPassword });
+async function exchangeCodeForSession(code: string) {
+  return supabase.auth.exchangeCodeForSession(code);
 }
 
-export async function sendVerificationOtp(email: string)
-{
+async function updatePassword(password: string) {
+  return supabase.auth.updateUser({ password });
+}
+
+async function sendVerificationOtp(email: string) {
   return supabase.auth.signInWithOtp({
     email,
     options: {
@@ -71,22 +65,27 @@ export async function sendVerificationOtp(email: string)
   });
 }
 
-export async function verifyEmailOtp(input: VerifyEmailOtpInput)
-{
+async function verifyEmailOtp(email: string, token: string) {
   return supabase.auth.verifyOtp({
-    email: input.email,
-    token: input.token,
+    email,
+    token,
     type: "email",
   });
+}
+
+async function getSession() {
+  return supabase.auth.getSession();
 }
 
 export const authService = {
   signUp,
   signInWithPassword,
   signOut,
-  signOutGlobal,
+  signOutEverywhere,
   resetPasswordForEmail,
+  exchangeCodeForSession,
   updatePassword,
   sendVerificationOtp,
   verifyEmailOtp,
+  getSession,
 };

@@ -29,16 +29,18 @@ public sealed class VerifyEmailCommandHandler : IRequestHandler<VerifyEmailComma
       throw new NotFoundException($"User with id '{request.UserId}' was not found.");
     }
 
+    // this endpoint must be idempotent after OTP verification succeeds.
     if (user.EmailVerified)
     {
       return;
     }
 
-    var now = DateTimeOffset.UtcNow;
-    user.EmailVerified = true;
-    user.UpdatedAt = now;
+    var updatedAt = DateTimeOffset.UtcNow;
 
-    _auditLogService.Add(new AuditLog(Guid.NewGuid(), "user.email_verified", "users", now)
+    user.EmailVerified = true;
+    user.UpdatedAt = updatedAt;
+
+    _auditLogService.Add(new AuditLog(Guid.NewGuid(), "user.email_verified", "users", updatedAt)
     {
       ActorId = user.Id,
       EntityId = user.Id

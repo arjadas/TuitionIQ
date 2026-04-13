@@ -1,36 +1,33 @@
 export const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*]).{8,}$/;
 
-type PasswordValidationResult = {
-  valid: boolean;
-  errors: string[];
+type PasswordChecks = {
+  minLength: boolean;
+  uppercase: boolean;
+  lowercase: boolean;
+  digit: boolean;
+  special: boolean;
 };
 
-export function validatePassword(password: string): PasswordValidationResult
-{
-  const errors: string[] = [];
+export type PasswordValidationResult = {
+  isValid: boolean;
+  score: number;
+  checks: PasswordChecks;
+};
 
-  if (password.length < 8) {
-    errors.push("Password must be at least 8 characters.");
-  }
+export function validatePassword(password: string): PasswordValidationResult {
+  const checks: PasswordChecks = {
+    minLength: password.length >= 8,
+    uppercase: /[A-Z]/.test(password),
+    lowercase: /[a-z]/.test(password),
+    digit: /\d/.test(password),
+    special: /[!@#$%^&*]/.test(password),
+  };
 
-  if (!/[a-z]/.test(password)) {
-    errors.push("Password must include at least one lowercase letter.");
-  }
-
-  if (!/[A-Z]/.test(password)) {
-    errors.push("Password must include at least one uppercase letter.");
-  }
-
-  if (!/\d/.test(password)) {
-    errors.push("Password must include at least one number.");
-  }
-
-  if (!/[!@#$%^&*]/.test(password)) {
-    errors.push("Password must include at least one special character (!@#$%^&*).");
-  }
+  const score = Object.values(checks).filter(Boolean).length;
 
   return {
-    valid: PASSWORD_REGEX.test(password),
-    errors,
+    isValid: PASSWORD_REGEX.test(password),
+    score,
+    checks,
   };
 }

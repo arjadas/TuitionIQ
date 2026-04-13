@@ -1,8 +1,7 @@
-import { Redirect, Stack, type Href } from "expo-router";
 import { useAuthStore } from "@/src/store/authStore";
+import { Redirect, Stack } from "expo-router";
 
-export default function VerifyLayout()
-{
+export default function VerifyLayout() {
   const isInitialised = useAuthStore((state) => state.isInitialised);
   const session = useAuthStore((state) => state.session);
   const emailVerified = useAuthStore((state) => state.emailVerified);
@@ -12,12 +11,12 @@ export default function VerifyLayout()
   }
 
   if (!session) {
-    return <Redirect href={"/(auth)/login" as Href} />;
+    return <Redirect href="/(auth)/login" />;
   }
 
   if (emailVerified) {
-    return <Redirect href={"/home" as Href} />;
+    return <Redirect href="/home" />;
   }
 
-  return <Stack screenOptions={{ headerShown: false, gestureEnabled: false }} />;
+  return <Stack screenOptions={{ headerShown: false }} />;
 }
