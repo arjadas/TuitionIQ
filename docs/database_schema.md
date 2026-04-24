@@ -4,9 +4,9 @@
 > It is intended to be consumed by an AI agent to auto-generate migrations, C# Entity Framework models, and API structures.
 > **Database:** PostgreSQL (Supabase)
 > **ORM Target:** Entity Framework Core (C# / ASP.NET Core)
-> **Auth Provider:** Supabase Auth (passwordless magic link only — no passwords anywhere in the system)
+> **Auth Provider:** Supabase Auth (email + password — no passwordless magic links anywhere in the system)
 > **Convention:** snake_case table and column names, UUID primary keys, soft deletes where appropriate.
-> **Version:** v1.5.1
+> **Version:** v2.0.0
 
 ---
 
@@ -35,18 +35,26 @@ PostgreSQL level as the primary runtime safety layer.
 
 ### Authentication
 
-- Authentication is delegated entirely to **Supabase Auth** (GoTrue), using **passwordless magic link
-  only**. No passwords are stored anywhere in the system — not in the application database, not in
-  Supabase, not anywhere. This applies to all user types: teachers, admins, and students.
-- Supabase manages `auth.users` internally. The `public.users` table is TuitionIQ's canonical identity
-  record, populated automatically via a database trigger on the user's first magic link authentication.
+- Authentication is delegated entirely to **Supabase Auth** (GoTrue), using **email and password
+  only**. No passwordless flows, magic links, or OTP login mechanisms are used. This applies to all
+  user types: teachers, admins, and students.
+- Supabase manages `auth.users` internally, including bcrypt password hashing. The `public.users`
+  table is TuitionIQ's canonical identity record, populated automatically via a database trigger on
+  the user's first registration via `signUp()`.
 - The `auth_user_id` column in `public.users` stores the Supabase Auth UUID (`auth.users.id`), used
   as the bridge between the two schemas.
-- **Any person may register independently** by entering their email address on the login screen. Supabase
-  creates an `auth.users` record on the first OTP send if none exists, then fires the trigger that
-  creates the `public.users` row after successful magic link verification. At that point the user has no
-  org memberships and sees a welcome screen prompting them to create an organisation or wait for an
-  invite.
+- **Any person may register independently** by completing the Sign Up form (first name, last name,
+  email, password). Supabase creates an `auth.users` record and returns a session immediately. The
+  DB trigger fires and creates the `public.users` row with the name fields populated from the signup
+  metadata. At that point the user has no org memberships and sees a welcome screen prompting them
+  to create an organisation or wait for an invite.
+- **Post-login email OTP verification:** After every user's **first successful login**, before full
+  application access is granted, the app sends a one-time OTP code to the user's email address and
+  requires the user to submit it. This is an identity confirmation step, not a recurring authentication
+  factor. The `email_verified` column in `public.users` tracks whether a user has completed this step.
+  It is initialized to `FALSE` on user creation and set to `TRUE` by the C# API after successful OTP
+  confirmation. Unverified users (`email_verified = FALSE`) are denied access to all protected API
+  endpoints by the C# middleware layer.
 - **Students may authenticate before or after a teacher creates a pseudo-student record for them.**
   The two records are linked at invite acceptance via an email lookup. See Section 11.1.
 
@@ -77,18 +85,18 @@ Hard deletes are used for pure join/pivot tables (e.g., `organization_members`, 
 
 ## 2. Entity List
 
-| Entity               | Table Name             | Status  | Description                                                                                                                                                                                |
-| -------------------- | ---------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| User                 | `users`                | Active  | Universal identity record for any authenticated person. Populated on first Supabase magic link login via a DB trigger. Roles are per-org, not per-account.                                 |
-| Organization         | `organizations`        | Active  | The root tenant/workspace. Created by any user who becomes its `owner`.                                                                                                                    |
-| Organization Member  | `organization_members` | Active  | Join table linking users to organizations with a role. Central RBAC anchor and composite FK target. A user may appear in this table multiple times — once per organisation they belong to. |
-| Student              | `students`             | Updated | A student record scoped to an organization. Carries `account_status` lifecycle. `user_id` is unique per-org (not platform-wide) to support multi-org student participation.                |
-| Teacher–Student Link | `teacher_students`     | Active  | Explicit many-to-many between a teacher and a student. Uses composite FKs to enforce same-org membership.                                                                                  |
-| Invite               | `invites`              | Active  | Tokenized email invite. `invited_by` uses a composite FK to `organization_members` to ensure the sender is an org member.                                                                  |
-| Student Fee Config   | `student_fees`         | Active  | Fee configuration per student. Composite FKs enforce same-org tenant isolation for both the student and the setter.                                                                        |
-| Fee Period           | `fee_periods`          | Active  | Monthly billing period snapshot. Composite FK enforces tenant isolation on `student_id`.                                                                                                   |
-| Fee Payment          | `fee_payments`         | Active  | Individual payment ledger entry. Composite FKs enforce tenant isolation on both `student_id` and `recorded_by`.                                                                            |
-| Audit Log            | `audit_logs`           | Active  | Append-only log of significant data mutations for compliance and debugging.                                                                                                                |
+| Entity               | Table Name             | Status  | Description                                                                                                                                                                                        |
+| -------------------- | ---------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| User                 | `users`                | Active  | Universal identity record for any authenticated person. Populated on first `signUp()` via a DB trigger. Roles are per-org, not per-account. Includes `email_verified` for OTP verification status. |
+| Organization         | `organizations`        | Active  | The root tenant/workspace. Created by any user who becomes its `owner`.                                                                                                                            |
+| Organization Member  | `organization_members` | Active  | Join table linking users to organizations with a role. Central RBAC anchor and composite FK target. A user may appear in this table multiple times — once per organisation they belong to.         |
+| Student              | `students`             | Updated | A student record scoped to an organization. Carries `account_status` lifecycle. `user_id` is unique per-org (not platform-wide) to support multi-org student participation.                        |
+| Teacher–Student Link | `teacher_students`     | Active  | Explicit many-to-many between a teacher and a student. Uses composite FKs to enforce same-org membership.                                                                                          |
+| Invite               | `invites`              | Active  | Tokenized email invite. `invited_by` uses a composite FK to `organization_members` to ensure the sender is an org member.                                                                          |
+| Student Fee Config   | `student_fees`         | Active  | Fee configuration per student. Composite FKs enforce same-org tenant isolation for both the student and the setter.                                                                                |
+| Fee Period           | `fee_periods`          | Active  | Monthly billing period snapshot. Composite FK enforces tenant isolation on `student_id`.                                                                                                           |
+| Fee Payment          | `fee_payments`         | Active  | Individual payment ledger entry. Composite FKs enforce tenant isolation on both `student_id` and `recorded_by`.                                                                                    |
+| Audit Log            | `audit_logs`           | Active  | Append-only log of significant data mutations for compliance and debugging.                                                                                                                        |
 
 > **Future entities (stubbed in Section 6):** `subscriptions`, `classes`, `class_students`, `lessons`, `attendance`
 
@@ -98,9 +106,11 @@ Hard deletes are used for pure join/pivot tables (e.g., `organization_members`, 
 
 ```
 public.users  ← auth_user_id (Supabase Auth UUID)
-│   Populated on first magic link login via DB trigger.
+│   Populated on first signUp() via DB trigger.
+│   email_verified = FALSE until post-login OTP verification is completed.
 │   Any user may create an organisation (becomes owner) or join one via invite.
 │   Roles exist only in organization_members — not on the users record itself.
+│   No password column — credentials managed entirely by Supabase Auth.
 │
 └── organization_members (role: owner | admin | teacher | student)
         UNIQUE(organization_id, user_id)  ← composite FK target for all tenant-member checks
@@ -154,27 +164,35 @@ invites  (org-scoped, role: admin | teacher | student)
 ### 4.1 `users`
 
 > Canonical identity for any human actor in the system. Authentication is handled entirely by Supabase
-> Auth (passwordless magic link). This table is TuitionIQ's internal profile record; it is never used
-> for authentication directly. A `users` row is created automatically on first magic link authentication
-> via the `after_auth_user_created` trigger (see Section 8.4). Roles are assigned per-organisation via
+> Auth (email + password). This table is TuitionIQ's internal profile record; it is never used
+> for authentication directly. A `users` row is created automatically on first `signUp()` via the
+> `after_auth_user_created` trigger (see Section 8.4). Roles are assigned per-organisation via
 > `organization_members` — never stored here.
 >
 > **Auth provider is fixed as Supabase.** `auth_user_id` stores the Supabase Auth UUID
-> (`auth.users.id`). There is no `auth_provider` column because only one provider is used.
+> (`auth.users.id`). There is no `auth_provider` column because only one provider is used. There
+> is no password column — credentials are managed entirely by Supabase Auth.
+>
+> **email_verified:** Tracks whether the user has completed the mandatory post-login email OTP
+> verification step. Set to `FALSE` by the creation trigger. Set to `TRUE` by the C# API
+> (`PATCH /api/users/email-verification`) after the client successfully calls
+> `supabase.auth.verifyOtp()`. The C# middleware blocks all protected endpoint access for users
+> where `email_verified = FALSE`.
 
-| Column         | Type           | Constraints                   | Description                                                                                                    |
-| -------------- | -------------- | ----------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `id`           | `UUID`         | PK, DEFAULT gen_random_uuid() | Internal primary key. Set to match `auth.users.id` so that `auth.uid()` resolves directly without a join.      |
-| `auth_user_id` | `VARCHAR(255)` | NOT NULL, UNIQUE              | Supabase Auth UUID (`auth.users.id`). Used to link the two schemas.                                            |
-| `email`        | `VARCHAR(255)` | NOT NULL, UNIQUE              | Authentication email, kept in sync with `auth.users.email`. Distinct from `students.email` — see Section 11.1. |
-| `first_name`   | `VARCHAR(100)` | NOT NULL                      | Given name. Set to empty string by trigger; populated during onboarding profile completion.                    |
-| `last_name`    | `VARCHAR(100)` | NOT NULL                      | Family name. Same onboarding note applies.                                                                     |
-| `phone`        | `VARCHAR(30)`  | NULLABLE                      | User's personal contact phone number. Collected during onboarding (optional).                                  |
-| `avatar_url`   | `TEXT`         | NULLABLE                      | URL to profile picture.                                                                                        |
-| `is_active`    | `BOOLEAN`      | NOT NULL, DEFAULT TRUE        | Global account enabled flag. Setting FALSE blocks RLS-protected reads and C# API access.                       |
-| `created_at`   | `TIMESTAMPTZ`  | NOT NULL, DEFAULT NOW()       | Record creation timestamp.                                                                                     |
-| `updated_at`   | `TIMESTAMPTZ`  | NOT NULL, DEFAULT NOW()       | Last update timestamp.                                                                                         |
-| `deleted_at`   | `TIMESTAMPTZ`  | NULLABLE                      | Soft delete timestamp. See Section 1 for soft-delete safety rules and the three-layer ban process.             |
+| Column           | Type           | Constraints                   | Description                                                                                                         |
+| ---------------- | -------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `id`             | `UUID`         | PK, DEFAULT gen_random_uuid() | Internal primary key. Set to match `auth.users.id` so that `auth.uid()` resolves directly without a join.           |
+| `auth_user_id`   | `VARCHAR(255)` | NOT NULL, UNIQUE              | Supabase Auth UUID (`auth.users.id`). Used to link the two schemas.                                                 |
+| `email`          | `VARCHAR(255)` | NOT NULL, UNIQUE              | Authentication email, kept in sync with `auth.users.email`. Distinct from `students.email` — see Section 11.1.      |
+| `first_name`     | `VARCHAR(100)` | NOT NULL                      | Given name. Populated at registration from `signUp()` metadata via the trigger.                                     |
+| `last_name`      | `VARCHAR(100)` | NOT NULL                      | Family name. Populated at registration from `signUp()` metadata via the trigger.                                    |
+| `phone`          | `VARCHAR(30)`  | NULLABLE                      | User's personal contact phone number. Collected during sign-up (optional).                                          |
+| `avatar_url`     | `TEXT`         | NULLABLE                      | URL to profile picture.                                                                                             |
+| `email_verified` | `BOOLEAN`      | NOT NULL, DEFAULT FALSE       | Whether the user has completed post-login email OTP verification. Set by C# API only; never by the client directly. |
+| `is_active`      | `BOOLEAN`      | NOT NULL, DEFAULT TRUE        | Global account enabled flag. Setting FALSE blocks RLS-protected reads and C# API access.                            |
+| `created_at`     | `TIMESTAMPTZ`  | NOT NULL, DEFAULT NOW()       | Record creation timestamp.                                                                                          |
+| `updated_at`     | `TIMESTAMPTZ`  | NOT NULL, DEFAULT NOW()       | Last update timestamp.                                                                                              |
+| `deleted_at`     | `TIMESTAMPTZ`  | NULLABLE                      | Soft delete timestamp. See Section 1 for soft-delete safety rules and the three-layer ban process.                  |
 
 **Primary Key:** `id`
 **Unique Constraints:** `auth_user_id`, `email`
@@ -182,7 +200,8 @@ invites  (org-scoped, role: admin | teacher | student)
 
 ```sql
 CREATE UNIQUE INDEX idx_users_auth_user_id ON users (auth_user_id);
-CREATE UNIQUE INDEX idx_users_email            ON users (email)       WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX idx_users_email            ON users (email)            WHERE deleted_at IS NULL;
+CREATE INDEX        idx_users_email_verified   ON users (email_verified)   WHERE deleted_at IS NULL;
 CREATE INDEX        idx_users_deleted_at       ON users (deleted_at);
 ```
 
@@ -191,8 +210,8 @@ CREATE INDEX        idx_users_deleted_at       ON users (deleted_at);
 ### 4.2 `organizations`
 
 > The root tenant/workspace. Created by any authenticated user, who automatically becomes the `owner`.
-> There is no restriction on who may create an organisation — any user who has completed magic link
-> authentication and profile setup can do so.
+> There is no restriction on who may create an organisation — any user who has completed registration,
+> email OTP verification, and profile setup can do so.
 
 | Column            | Type           | Constraints                   | Description                                            |
 | ----------------- | -------------- | ----------------------------- | ------------------------------------------------------ |
@@ -368,27 +387,27 @@ CREATE UNIQUE INDEX idx_students_org_id_composite
 > (an `invites` row is created with `role='student'` and `student_id` pre-linked) →
 > application performs email lookup against `users.email` →
 > if existing `users` row found: `students.user_id` populated immediately, `account_status` → `active`,
-> `organization_members` row inserted — no new magic link registration required →
-> if no existing `users` row: student receives token email; upon clicking and completing magic link
-> authentication, `users` row is created by trigger, `students.user_id` populated,
-> `organization_members` inserted, `account_status` → `active`.
+> `organization_members` row inserted — student must log in to access the portal (already has credentials) →
+> if no existing `users` row: student receives invite email; upon clicking, they see a Sign Up form
+> (email pre-filled, read-only), collect first_name, last_name, password → `signUp()` → DB trigger
+> creates `public.users` → OTP verification → invite acceptance → `account_status` → `active`.
 >
-> **Path B — Self-register-first (student authenticates independently, teacher invites later):**
-> Student enters email on login screen → Supabase creates `auth.users`, trigger creates `public.users`
-> with empty name fields → student completes profile (first name, last name) →
+> **Path B — Self-register-first (student registers independently, teacher invites later):**
+> Student completes Sign Up form → Supabase creates `auth.users`, trigger creates `public.users`
+> with names populated from metadata → student completes OTP verification →
 > student sees welcome screen: _"Ask your teacher to invite you to their organisation."_ →
 > Teacher creates `students` row (pseudo-student, `user_id = NULL`) →
 > Teacher sends invite → email lookup finds existing `users` row → immediate linking →
 > `students.user_id` populated, `account_status` → `active`, `organization_members` inserted.
-> Student receives a notification email (not a registration link) and gains org access.
+> Student receives a notification email and gains org access.
 >
 > **`account_status` state table:**
 >
-> | `account_status` | `user_id` | Meaning                                                        |
-> | ---------------- | --------- | -------------------------------------------------------------- |
-> | `no_account`     | NULL      | Student record exists; no invite sent; no linked user account  |
-> | `invite_pending` | NULL      | Invite sent; student has not yet authenticated or been matched |
-> | `active`         | populated | `users` row linked; student has org access                     |
+> | `account_status` | `user_id` | Meaning                                                       |
+> | ---------------- | --------- | ------------------------------------------------------------- |
+> | `no_account`     | NULL      | Student record exists; no invite sent; no linked user account |
+> | `invite_pending` | NULL      | Invite sent; student has not yet registered or been matched   |
+> | `active`         | populated | `users` row linked; student has org access                    |
 
 ---
 
@@ -468,12 +487,14 @@ CREATE INDEX idx_teacher_students_teacher
 >
 > **Invite flow email lookup:** Before creating an invite, the application must query `users.email`.
 > If a matching `users` row exists, the link to `students.user_id` can be made immediately at dispatch
-> (without requiring the student to click the token). The `invites` row is still created for audit
-> purposes. See Section 11.1.
+> (without requiring the student to register). The `invites` row is still created for audit purposes.
+> See Section 11.1.
 >
-> **Note on invite tokens vs. magic links:** The invite token stored in this table is a TuitionIQ
-> application-level token used for org membership acceptance. It is entirely separate from the Supabase
-> magic link OTP token used for authentication. The two mechanisms operate independently.
+> **Note on invite tokens vs. Supabase auth tokens:** The invite token stored in this table is a
+> TuitionIQ application-level token used for org membership acceptance. It is entirely separate from
+> Supabase session tokens, JWT access tokens, or password reset tokens. The two mechanisms operate
+> independently. Clicking an invite link never authenticates a user — it only accepts org membership
+> after the user has separately authenticated with their email and password.
 
 | Column            | Type           | Constraints                                    | Description                                                             |
 | ----------------- | -------------- | ---------------------------------------------- | ----------------------------------------------------------------------- |
@@ -543,20 +564,23 @@ CREATE INDEX        idx_invites_student_id ON invites (student_id)              
 > Since `created_by` has been removed from `students`, the `audit_logs` table is the authoritative
 > record of who created any given student record. The C# service layer must always insert an
 > `audit_logs` row in the same transaction as any student creation or mutation.
+>
+> **Audit actions include email verification:** The action `'user.email_verified'` is written when
+> the C# API marks a user's `email_verified` flag as `TRUE` after successful OTP confirmation.
 
-| Column            | Type           | Constraints                                         | Description                                                                        |
-| ----------------- | -------------- | --------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `id`              | `UUID`         | PK, DEFAULT gen_random_uuid()                       | Internal primary key.                                                              |
-| `organization_id` | `UUID`         | NULLABLE, FK → organizations(id) ON DELETE SET NULL | Tenant scope (null for platform-level events).                                     |
-| `actor_id`        | `UUID`         | NULLABLE, FK → users(id) ON DELETE SET NULL         | The user who performed the action (null = system).                                 |
-| `action`          | `VARCHAR(100)` | NOT NULL                                            | Verb, e.g. `'fee_payment.recorded'`, `'student.created'`, `'student.invite_sent'`. |
-| `entity_type`     | `VARCHAR(100)` | NOT NULL                                            | Table/entity affected, e.g. `'students'`, `'fee_payments'`.                        |
-| `entity_id`       | `UUID`         | NULLABLE                                            | The PK of the affected row.                                                        |
-| `old_values`      | `JSONB`        | NULLABLE                                            | Snapshot of the record before the change.                                          |
-| `new_values`      | `JSONB`        | NULLABLE                                            | Snapshot of the record after the change.                                           |
-| `ip_address`      | `INET`         | NULLABLE                                            | Client IP at time of action.                                                       |
-| `user_agent`      | `TEXT`         | NULLABLE                                            | Client user-agent string.                                                          |
-| `created_at`      | `TIMESTAMPTZ`  | NOT NULL, DEFAULT NOW()                             | When the event occurred.                                                           |
+| Column            | Type           | Constraints                                         | Description                                                                                                 |
+| ----------------- | -------------- | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `id`              | `UUID`         | PK, DEFAULT gen_random_uuid()                       | Internal primary key.                                                                                       |
+| `organization_id` | `UUID`         | NULLABLE, FK → organizations(id) ON DELETE SET NULL | Tenant scope (null for platform-level events such as `user.email_verified`).                                |
+| `actor_id`        | `UUID`         | NULLABLE, FK → users(id) ON DELETE SET NULL         | The user who performed the action (null = system).                                                          |
+| `action`          | `VARCHAR(100)` | NOT NULL                                            | Verb, e.g. `'fee_payment.recorded'`, `'student.created'`, `'student.invite_sent'`, `'user.email_verified'`. |
+| `entity_type`     | `VARCHAR(100)` | NOT NULL                                            | Table/entity affected, e.g. `'students'`, `'fee_payments'`, `'users'`.                                      |
+| `entity_id`       | `UUID`         | NULLABLE                                            | The PK of the affected row.                                                                                 |
+| `old_values`      | `JSONB`        | NULLABLE                                            | Snapshot of the record before the change.                                                                   |
+| `new_values`      | `JSONB`        | NULLABLE                                            | Snapshot of the record after the change.                                                                    |
+| `ip_address`      | `INET`         | NULLABLE                                            | Client IP at time of action.                                                                                |
+| `user_agent`      | `TEXT`         | NULLABLE                                            | Client user-agent string.                                                                                   |
+| `created_at`      | `TIMESTAMPTZ`  | NOT NULL, DEFAULT NOW()                             | When the event occurred.                                                                                    |
 
 **Primary Key:** `id`
 **Indexes:**
@@ -1202,9 +1226,11 @@ CREATE TRIGGER trg_guard_fee_payments_student
 
 ### 8.4 `public.users` Creation Trigger (Supabase Auth Bridge)
 
-> Fires once per user, on first successful magic link authentication. Bridges Supabase's `auth.users`
-> with TuitionIQ's `public.users`. `first_name` and `last_name` are seeded as empty strings; the
-> profile completion screen collects the real values immediately after first login.
+> Fires once per user, on first successful registration via `signUp()`. Bridges Supabase's `auth.users`
+> with TuitionIQ's `public.users`. `first_name` and `last_name` are populated from `raw_user_meta_data`
+> because the Sign Up form passes `options: { data: { first_name, last_name } }` to `signUp()`.
+> `email_verified` is always initialized to `FALSE` — the post-login OTP verification step
+> (described in authentication.md Section 1.2a) must be completed before the user gains full access.
 
 ```sql
 CREATE OR REPLACE FUNCTION public.handle_new_user()
@@ -1212,7 +1238,7 @@ RETURNS TRIGGER AS $$
 BEGIN
   INSERT INTO public.users (
     id, auth_user_id, email,
-    first_name, last_name, is_active, created_at, updated_at
+    first_name, last_name, email_verified, is_active, created_at, updated_at
   )
   VALUES (
     NEW.id,
@@ -1220,6 +1246,7 @@ BEGIN
     NEW.email,
     COALESCE(NEW.raw_user_meta_data->>'first_name', ''),
     COALESCE(NEW.raw_user_meta_data->>'last_name',  ''),
+    FALSE,   -- requires post-login OTP verification before full access is granted
     TRUE,
     NOW(),
     NOW()
@@ -1239,29 +1266,30 @@ CREATE TRIGGER after_auth_user_created
 
 ## 9. C# / Entity Framework Notes for the Generating Agent
 
-| Concern                             | Guidance                                                                                                                                                                                                                                                                                |
-| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Naming convention**               | EF model classes use PascalCase (e.g. `FeePayment`). Use `ToTable("fee_payments")` in Fluent API.                                                                                                                                                                                       |
-| **UUID PKs**                        | Use `Guid` in C#. Configure with `.HasDefaultValueSql("gen_random_uuid()")`.                                                                                                                                                                                                            |
-| **Soft deletes**                    | Global `HasQueryFilter(e => e.DeletedAt == null)` on every soft-deletable entity. Critical for `FeePayment` — reversed payments must be excluded from all totals automatically.                                                                                                         |
-| **Timestamps**                      | `DateTimeOffset` → `TIMESTAMPTZ`. `DateOnly` → `DATE` (for `payment_date`, `effective_from`, `effective_to`, `due_date`).                                                                                                                                                               |
-| **JSONB columns**                   | `HasColumnType("jsonb")`. Use `Dictionary<string,object>` or a typed class serialised via `System.Text.Json`.                                                                                                                                                                           |
-| **Enum columns**                    | Store as `VARCHAR`. Use C# `enum` + `HasConversion<string>()` value converter.                                                                                                                                                                                                          |
-| **Audit log**                       | Insert-only entity. Override `SaveChanges` to throw if an `AuditLog` is in `Modified` or `Deleted` state. Student creation must always write an `audit_logs` row in the same transaction — this is the authoritative record of authorship since `students.created_by` no longer exists. |
-| **Money**                           | Always `BIGINT` in DB → `long` in C#. Values are whole integers in the specified currency (no subunits). Never use `decimal`/`NUMERIC` for money.                                                                                                                                       |
-| **Composite FKs**                   | EF Core does not natively model composite FKs. Define them in a custom migration `Sql()` call after EF generates the table DDL. Shadow properties may be needed for the non-PK column (`organization_id`) on the dependent side.                                                        |
-| **`fee_periods.amount_paid`**       | Denormalized cache. Always update within the same `SaveChanges()` transaction as `FeePayment` insert/soft-delete. The DB trigger in Section 8.2 is the safety net, but do not rely on it exclusively.                                                                                   |
-| **`student_fees` one-active rule**  | Service layer: within one transaction, close the old row (`is_active=false`, `effective_to=today`), then insert the new row. The partial unique index enforces this at DB level.                                                                                                        |
-| **Concurrency tokens**              | Apply `xmin` rowversion on `fee_periods` and `students` — highest contention rows.                                                                                                                                                                                                      |
-| **Schema**                          | All tables in schema `public` (Supabase default). Use `.HasDefaultSchema("public")` in `OnModelCreating`.                                                                                                                                                                               |
-| **`account_status` enum**           | C# enum `StudentAccountStatus` with values `NoAccount`, `InvitePending`, `Active`. `HasConversion<string>()`.                                                                                                                                                                           |
-| **Soft-delete guard trigger**       | The trigger in Section 8.3 will raise a PostgreSQL exception. Catch `PostgresException` with `SqlState = "P0001"` in C# and translate to a domain exception in the service layer.                                                                                                       |
-| **`students.user_id` uniqueness**   | The unique index is `(organization_id, user_id)` scoped. Do not model as a simple navigation property unique constraint in EF. Define in a raw migration `Sql()` call to preserve the partial index behaviour (`WHERE user_id IS NOT NULL`).                                            |
-| **Multi-org student lookup**        | Never assume one `users` row maps to one `students` row. When resolving which orgs a logged-in student belongs to, query `organization_members` filtered by `user_id` and `role = 'student'`, then join to `students` on `(organization_id, user_id)`.                                  |
-| **Email lookup on invite dispatch** | Before creating a student invite, the service layer must query `users` by `email`. If a match is found, link `students.user_id` immediately and mark the invite `accepted`. If no match, issue the token for standard magic link flow.                                                  |
-| **Supabase auth bridge**            | `users.id` is set to match `auth.users.id`. Use `auth.uid()` in RLS policies and compare directly against `users.id` without a join.                                                                                                                                                    |
-| **No passwords anywhere**           | The `users` table has no password column. No Supabase password sign-in. Do not implement or expose any password-based auth endpoint.                                                                                                                                                    |
-| **`students` has no `created_by`**  | Do not generate a navigation property or FK for `created_by` on `Student`. Authorship is recorded exclusively in `audit_logs`.                                                                                                                                                          |
+| Concern                             | Guidance                                                                                                                                                                                                                                                                                                                                                                         |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Naming convention**               | EF model classes use PascalCase (e.g. `FeePayment`). Use `ToTable("fee_payments")` in Fluent API.                                                                                                                                                                                                                                                                                |
+| **UUID PKs**                        | Use `Guid` in C#. Configure with `.HasDefaultValueSql("gen_random_uuid()")`.                                                                                                                                                                                                                                                                                                     |
+| **Soft deletes**                    | Global `HasQueryFilter(e => e.DeletedAt == null)` on every soft-deletable entity. Critical for `FeePayment` — reversed payments must be excluded from all totals automatically.                                                                                                                                                                                                  |
+| **Timestamps**                      | `DateTimeOffset` → `TIMESTAMPTZ`. `DateOnly` → `DATE` (for `payment_date`, `effective_from`, `effective_to`, `due_date`).                                                                                                                                                                                                                                                        |
+| **JSONB columns**                   | `HasColumnType("jsonb")`. Use `Dictionary<string,object>` or a typed class serialised via `System.Text.Json`.                                                                                                                                                                                                                                                                    |
+| **Enum columns**                    | Store as `VARCHAR`. Use C# `enum` + `HasConversion<string>()` value converter.                                                                                                                                                                                                                                                                                                   |
+| **Audit log**                       | Insert-only entity. Override `SaveChanges` to throw if an `AuditLog` is in `Modified` or `Deleted` state. Student creation must always write an `audit_logs` row in the same transaction — this is the authoritative record of authorship since `students.created_by` no longer exists. Email verification (`action='user.email_verified'`) must also write an `audit_logs` row. |
+| **Money**                           | Always `BIGINT` in DB → `long` in C#. Values are whole integers in the specified currency (no subunits). Never use `decimal`/`NUMERIC` for money.                                                                                                                                                                                                                                |
+| **Composite FKs**                   | EF Core does not natively model composite FKs. Define them in a custom migration `Sql()` call after EF generates the table DDL. Shadow properties may be needed for the non-PK column (`organization_id`) on the dependent side.                                                                                                                                                 |
+| **`fee_periods.amount_paid`**       | Denormalized cache. Always update within the same `SaveChanges()` transaction as `FeePayment` insert/soft-delete. The DB trigger in Section 8.2 is the safety net, but do not rely on it exclusively.                                                                                                                                                                            |
+| **`student_fees` one-active rule**  | Service layer: within one transaction, close the old row (`is_active=false`, `effective_to=today`), then insert the new row. The partial unique index enforces this at DB level.                                                                                                                                                                                                 |
+| **Concurrency tokens**              | Apply `xmin` rowversion on `fee_periods` and `students` — highest contention rows.                                                                                                                                                                                                                                                                                               |
+| **Schema**                          | All tables in schema `public` (Supabase default). Use `.HasDefaultSchema("public")` in `OnModelCreating`.                                                                                                                                                                                                                                                                        |
+| **`account_status` enum**           | C# enum `StudentAccountStatus` with values `NoAccount`, `InvitePending`, `Active`. `HasConversion<string>()`.                                                                                                                                                                                                                                                                    |
+| **Soft-delete guard trigger**       | The trigger in Section 8.3 will raise a PostgreSQL exception. Catch `PostgresException` with `SqlState = "P0001"` in C# and translate to a domain exception in the service layer.                                                                                                                                                                                                |
+| **`students.user_id` uniqueness**   | The unique index is `(organization_id, user_id)` scoped. Do not model as a simple navigation property unique constraint in EF. Define in a raw migration `Sql()` call to preserve the partial index behaviour (`WHERE user_id IS NOT NULL`).                                                                                                                                     |
+| **Multi-org student lookup**        | Never assume one `users` row maps to one `students` row. When resolving which orgs a logged-in student belongs to, query `organization_members` filtered by `user_id` and `role = 'student'`, then join to `students` on `(organization_id, user_id)`.                                                                                                                           |
+| **Email lookup on invite dispatch** | Before creating a student invite, the service layer must query `users` by `email`. If a match is found, link `students.user_id` immediately and mark the invite `accepted`. If no match, issue the token for the standard invite + signup flow.                                                                                                                                  |
+| **Supabase auth bridge**            | `users.id` is set to match `auth.users.id`. Use `auth.uid()` in RLS policies and compare directly against `users.id` without a join.                                                                                                                                                                                                                                             |
+| **No passwords anywhere**           | The `users` table has no password column. Passwords are managed entirely by Supabase Auth. Do not implement or expose any endpoint that accepts, stores, or returns passwords. Do not add a password column in any migration.                                                                                                                                                    |
+| **`email_verified` column**         | Map to `bool EmailVerified` on the `User` entity. The C# `UserActiveCheckMiddleware` must check both `IsActive = true` AND `EmailVerified = true` on every protected request. Only the `PATCH /api/users/email-verification` endpoint may set `EmailVerified = true`.                                                                                                            |
+| **`students` has no `created_by`**  | Do not generate a navigation property or FK for `created_by` on `Student`. Authorship is recorded exclusively in `audit_logs`.                                                                                                                                                                                                                                                   |
 
 ---
 
@@ -1270,6 +1298,8 @@ CREATE TRIGGER after_auth_user_created
 ```
 Phase 1 — Core Identity & Tenancy
   1.  users
+        ← includes email_verified BOOLEAN NOT NULL DEFAULT FALSE
+        ← UNIQUE(organization_id, user_id) is a composite FK target — create this constraint first
   2.  organizations
   3.  organization_members
         ← UNIQUE(organization_id, user_id) is a composite FK target — create this constraint first
@@ -1304,22 +1334,21 @@ Future phases (do not generate yet)
   16. attendance
 ```
 
-> **Migration note for upgrades from v1.4:**
+> **Migration note for upgrades from v1.5.1 (passwordless → password auth):**
 >
-> - Drop `students.created_by` column and its index `idx_students_created_by`.
-> - Drop `students.date_of_birth` column.
-> - Drop `students.grade_level` column.
-> - Drop `users.display_name` column.
-> - Drop `users.auth_provider` column (was always `'supabase'`).
-> - Add `users.phone` column (nullable).
-> - Add `students.phone` column (nullable).
-> - Rename `student_fees.manual_fee_cents` → `manual_fee`.
-> - Rename `fee_periods.fee_cents` → `fee`.
-> - Rename `fee_periods.amount_paid_cents` → `amount_paid`.
-> - Rename `fee_payments.amount_cents` → `amount`.
-> - Update `currency` DEFAULT from `'GBP'` to `'BDT'` on `student_fees`, `fee_periods`, `fee_payments`, and the future `classes` table.
-> - Update the `sync_fee_period_totals` trigger body to reference the renamed columns.
-> - Verify no application-layer code references any of the removed columns before applying.
+> - Add `users.email_verified BOOLEAN NOT NULL DEFAULT FALSE` column.
+> - Add `CREATE INDEX idx_users_email_verified ON users (email_verified) WHERE deleted_at IS NULL`.
+> - Update the `handle_new_user` trigger body to include `email_verified = FALSE` in the INSERT.
+> - Supabase Auth configuration: enable email/password sign-in; disable OTP-only sign-in.
+>   The `signInWithOtp` endpoint remains enabled in Auth settings because it is used for the
+>   post-login email OTP verification step (with `shouldCreateUser: false`).
+> - Update allowed redirect URLs: replace magic link callback URLs with password reset callback URLs
+>   (`/auth/reset-password`).
+> - All existing `public.users` rows: run `UPDATE public.users SET email_verified = TRUE`
+>   for all existing users who were previously authenticated via magic link (they already verified
+>   their identity by that mechanism). Only newly registered users after the migration cutoff
+>   will go through the OTP verification step.
+> - Verify no application-layer code references magic link or OTP login flows before applying.
 
 ---
 
@@ -1327,34 +1356,34 @@ Future phases (do not generate yet)
 
 ---
 
-### 11.1 Registration Model — Passwordless, Supabase-Native
+### 11.1 Registration Model — Password-Based, Supabase-Native
 
-**Core principle:** Authentication is handled exclusively by Supabase Auth via passwordless magic link.
-There are no passwords anywhere in the system. A role is not a property of a user account — it is a
-property of the relationship between a user and an organisation, stored in `organization_members.role`.
-The `users` table carries no role column and no credential storage.
+**Core principle:** Authentication is handled exclusively by Supabase Auth via email and password.
+No magic links, OTP logins, or passwordless flows are used for authentication. A role is not a property
+of a user account — it is a property of the relationship between a user and an organisation, stored in
+`organization_members.role`. The `users` table carries no role column and no credential storage.
 
 **How a `public.users` row is created:**
 
-Every user enters their email on the single login screen. Supabase:
+The user completes the Sign Up form: first name, last name, email, password. Supabase:
 
-1. If `auth.users` already exists for that email → sends a magic link (returning user).
-2. If no `auth.users` record exists → creates `auth.users`, fires the `after_auth_user_created` trigger
-   which inserts a `public.users` row with empty `first_name` and `last_name`, then sends a magic link.
+1. Creates `auth.users` with a bcrypt-hashed password (internally managed).
+2. Fires the `after_auth_user_created` trigger, which inserts a `public.users` row with
+   `first_name`, `last_name` populated from `raw_user_meta_data`, and `email_verified = FALSE`.
+3. Returns a session immediately.
 
-After the user clicks the magic link and a session is established:
+After `signUp()` returns a session:
 
-- The app checks `first_name` and `last_name` in `public.users`.
-- If either is empty (new user), a blocking profile completion screen collects first name, last name,
-  and optionally phone number. This cannot be dismissed without completing the form.
-- After profile completion, the app checks `organization_members` to determine org context.
+- The app sends an OTP to the user's email (via `signInWithOtp` with `shouldCreateUser: false`).
+- The user submits the OTP. On success, the C# API sets `email_verified = TRUE`.
+- The app checks `organization_members` to determine org context.
 
 **Registration entry points:**
 
-| Route                     | Who uses it                      | What it creates                                                                                                                                                                                                   |
-| ------------------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Login screen (magic link) | Anyone — teacher, student, admin | `auth.users` (if new) + `public.users` (via trigger). No org membership yet.                                                                                                                                      |
-| `/join?token=xyz`         | Invited users — any role         | Validates the TuitionIQ invite token. If user already authenticated: links the invite, inserts `organization_members`. If not yet authenticated: user completes magic link flow, then invite acceptance proceeds. |
+| Route                           | Who uses it                      | What it creates                                                                                                                                                                        |
+| ------------------------------- | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Sign Up screen (`/auth/signup`) | Anyone — teacher, student, admin | `auth.users` (Supabase) + `public.users` (via trigger) with `email_verified = FALSE`. No org membership yet.                                                                           |
+| `/join?token=xyz`               | Invited users — any role         | If no account: shows Sign Up form (email pre-filled), user sets password, same registration flow. If account exists: shows Login form. After auth + OTP verification, invite accepted. |
 
 **The `students` table as billing and academic anchor:**
 
@@ -1370,31 +1399,29 @@ regardless of auth status.
 1. Teacher creates `students` row (`user_id = NULL`, `account_status = 'no_account'`).
 2. Teacher sends portal invite → `invites` row created (`role='student'`, `student_id` pre-linked).
 3. C# API performs **email lookup**: queries `users.email` against the invite email.
-   - **Match found (student already authenticated):** Link `students.user_id` immediately,
+   - **Match found (student already registered):** Link `students.user_id` immediately,
      flip `account_status` → `'active'`, insert `organization_members (role='student')`.
      Mark invite `accepted`. Student does not need to click any token.
-   - **No match:** Send token email. `account_status` → `'invite_pending'`.
-4. Student enters their email on the login screen → magic link sent → Supabase creates `auth.users`
-   → trigger creates `public.users` → profile completion → student clicks the invite link
-   → C# API validates token and email match → `students.user_id` populated →
-   `organization_members` inserted → `account_status` → `'active'`.
+   - **No match:** Send invite email with token. `account_status` → `'invite_pending'`.
+4. Student clicks invite link `/join?token=<token>` → shown Sign Up form (email pre-filled, read-only) →
+   enters first name, last name, password → `signUp()` → DB trigger creates `public.users` →
+   OTP verification → invite acceptance → `account_status` → `'active'`.
 
-**Path B — Self-register-first** (student authenticates independently, teacher invites later):
+**Path B — Self-register-first** (student registers independently, teacher invites later):
 
-1. Student enters email on login screen → magic link flow → `auth.users` created → trigger creates
-   `public.users` → profile completion → student sees welcome screen:
-   _"Ask your teacher to invite you to their organisation."_
+1. Student completes Sign Up form → `signUp()` → DB trigger creates `public.users` → OTP verification →
+   student sees welcome screen: _"Ask your teacher to invite you to their organisation."_
 2. Teacher creates `students` row (pseudo-student, `user_id = NULL`).
 3. Teacher sends invite → C# API performs email lookup → finds existing `users` row → immediate
-   linking as in Path A step 3 match case. Student receives notification email and gains org access.
+   linking. Student receives notification email and gains org access.
 
 **`account_status` state table:**
 
-| `account_status` | `user_id` | Meaning                                                        |
-| ---------------- | --------- | -------------------------------------------------------------- |
-| `no_account`     | NULL      | Student record exists; no invite sent; no linked user account  |
-| `invite_pending` | NULL      | Invite sent; student has not yet authenticated or been matched |
-| `active`         | populated | `users` row linked; student has org access                     |
+| `account_status` | `user_id` | Meaning                                                       |
+| ---------------- | --------- | ------------------------------------------------------------- |
+| `no_account`     | NULL      | Student record exists; no invite sent; no linked user account |
+| `invite_pending` | NULL      | Invite sent; student has not yet registered or been matched   |
+| `active`         | populated | `users` row linked; student has org access                    |
 
 **Multi-org student participation:**
 
@@ -1420,8 +1447,7 @@ stored independently and may legitimately differ or drift over time:
 - `students.email` is the contact address the teacher holds on file.
 - `users.email` is the address the student used to register with Supabase.
 - The email lookup at invite dispatch uses `students.email` to query `users.email`. If they differ,
-  the lookup will not match and the token flow will be used instead. The teacher can update
-  `students.email` to match if needed.
+  the lookup will not match and the token + signup flow will be used instead.
 - This boundary must be explicitly documented in the service layer to prevent accidental cross-field
   updates.
 
@@ -1518,27 +1544,28 @@ since EF Core's `HasForeignKey` fluent API targets navigation properties, not ra
 
 ### 11.6 Why the Schema Avoids Future Breaking Migrations — Summary
 
-| Future capability                                | How the current schema already supports it                                                                                  |
-| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
-| Any user creating an organisation                | `organizations.owner_id → users(id)`. No role restriction on who may insert.                                                |
-| Students authenticating before teacher invite    | `users` row created independently; `students.user_id` stays NULL until email lookup links them at invite dispatch           |
-| One person as student in multiple orgs           | `UNIQUE(organization_id, user_id)` on `students` allows same `users.id` across multiple org-scoped student rows             |
-| Student logging in and switching orgs            | Auth resolves `users` row via Supabase session. App queries `organization_members` for all memberships. Org switcher in UI. |
-| Students gaining portal access                   | `students.user_id` nullable FK + `account_status`. Linking is a data operation, no schema change.                           |
-| Fee rate changes mid-year                        | `student_fees` effective dates. `fee_periods.fee` is an immutable snapshot.                                                 |
-| Partial payments                                 | `fee_payments` ledger. `fee_periods.amount_paid` cache. Partial is first-class.                                             |
-| Payment corrections                              | Soft-delete wrong row, insert corrected row. Trigger recalculates. No in-place money edits.                                 |
-| Class-based billing                              | `fee_source` routing + `classes.fee_amount` + `class_students.fee_override`.                                                |
-| Teacher override of class fees                   | `fee_source = 'override'` + `manual_fee`. Class total preserved for audit.                                                  |
-| Admin role                                       | `organization_members.role = 'admin'` already accepted. No new tables.                                                      |
-| Multi-currency                                   | `currency CHAR(3)` on all money tables from day one. BDT default.                                                           |
-| LMS content for students                         | Future content tables FK to `students.id`, not `users.id`.                                                                  |
-| Attendance tracking                              | `attendance` FKs to `lessons` and `students`. Zero impact on existing tables.                                               |
-| Authorship auditing                              | `audit_logs` captures actor on every mutation. No `created_by` FK required.                                                 |
-| Cross-tenant data leak prevention                | Composite FKs including `organization_id` enforce isolation at DB level.                                                    |
-| Soft-deleted parent references                   | DB trigger (Section 8.3) raises exception if child inserted against deleted student.                                        |
-| Passwordless auth expansion (TOTP MFA, SAML SSO) | Supabase Auth supports both as add-ons. No schema changes needed — auth is entirely external.                               |
+| Future capability                             | How the current schema already supports it                                                                                  |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Any user creating an organisation             | `organizations.owner_id → users(id)`. No role restriction on who may insert.                                                |
+| Students registering before teacher invite    | `users` row created independently; `students.user_id` stays NULL until email lookup links them at invite dispatch           |
+| One person as student in multiple orgs        | `UNIQUE(organization_id, user_id)` on `students` allows same `users.id` across multiple org-scoped student rows             |
+| Student logging in and switching orgs         | Auth resolves `users` row via Supabase session. App queries `organization_members` for all memberships. Org switcher in UI. |
+| Students gaining portal access                | `students.user_id` nullable FK + `account_status`. Linking is a data operation, no schema change.                           |
+| Fee rate changes mid-year                     | `student_fees` effective dates. `fee_periods.fee` is an immutable snapshot.                                                 |
+| Partial payments                              | `fee_payments` ledger. `fee_periods.amount_paid` cache. Partial is first-class.                                             |
+| Payment corrections                           | Soft-delete wrong row, insert corrected row. Trigger recalculates. No in-place money edits.                                 |
+| Class-based billing                           | `fee_source` routing + `classes.fee_amount` + `class_students.fee_override`.                                                |
+| Teacher override of class fees                | `fee_source = 'override'` + `manual_fee`. Class total preserved for audit.                                                  |
+| Admin role                                    | `organization_members.role = 'admin'` already accepted. No new tables.                                                      |
+| Multi-currency                                | `currency CHAR(3)` on all money tables from day one. BDT default.                                                           |
+| LMS content for students                      | Future content tables FK to `students.id`, not `users.id`.                                                                  |
+| Attendance tracking                           | `attendance` FKs to `lessons` and `students`. Zero impact on existing tables.                                               |
+| Authorship auditing                           | `audit_logs` captures actor on every mutation. No `created_by` FK required.                                                 |
+| Cross-tenant data leak prevention             | Composite FKs including `organization_id` enforce isolation at DB level.                                                    |
+| Soft-deleted parent references                | DB trigger (Section 8.3) raises exception if child inserted against deleted student.                                        |
+| TOTP MFA, SAML SSO (password auth extensions) | Supabase Auth supports both as add-ons alongside password auth. No schema changes needed — auth is entirely external.       |
+| Email OTP verification tracking               | `users.email_verified BOOLEAN` already present. C# middleware and API endpoint handle the full lifecycle.                   |
 
 ---
 
-_End of TuitionIQ Database Schema — v1.5.1_
+_End of TuitionIQ Database Schema — v2.0.0_

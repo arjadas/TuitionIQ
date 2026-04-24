@@ -44,6 +44,11 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
       .HasColumnName("avatar_url")
       .HasColumnType("text");
 
+    builder.Property(e => e.EmailVerified)
+      .HasColumnName("email_verified")
+      .HasDefaultValue(false)
+      .IsRequired();
+
     builder.Property(e => e.IsActive)
       .HasColumnName("is_active")
       .HasDefaultValue(true)
@@ -70,6 +75,10 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
       .IsUnique()
       .HasFilter("\"deleted_at\" IS NULL")
       .HasDatabaseName("idx_users_email");
+
+    builder.HasIndex(e => e.EmailVerified)
+      .HasFilter("\"deleted_at\" IS NULL")
+      .HasDatabaseName("idx_users_email_verified");
 
     builder.HasIndex(e => e.DeletedAt)
       .HasDatabaseName("idx_users_deleted_at");

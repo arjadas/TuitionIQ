@@ -6,6 +6,7 @@ declare module "@tuitioniq/types" {
     lastName: string;
     phone?: string | null;
     avatarUrl?: string | null;
+    emailVerified: boolean;
   };
 
   export type UpdateProfileRequest = {

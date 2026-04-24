@@ -40,11 +40,21 @@ builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBeh
 
 builder.Services.AddCors(options =>
 {
+  var allowedOrigins = builder.Configuration
+    .GetSection("App:AllowedOrigins")
+    .Get<string[]>()
+    ?? Array.Empty<string>();
+
+  var corsOrigins = allowedOrigins
+    .Where(origin => origin.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+      || origin.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+    .ToArray();
+
   options.AddPolicy("ExpoWebPolicy", policy =>
   {
-    policy.WithOrigins("http://localhost:8081", "https://tuitioniq.pages.dev")
-          .AllowAnyHeader()
-          .AllowAnyMethod();
+    policy.WithOrigins(corsOrigins)
+      .AllowAnyHeader()
+      .AllowAnyMethod();
   });
 });
 
@@ -101,3 +111,7 @@ app.UseAuthorization();  // Enforces access rules (e.g. [Authorize] attributes, 
 app.MapControllers();  // Executes the matched controller action for the request
 
 app.Run();  // Starts the application and begins listening for incoming requests
+
+public partial class Program
+{
+}

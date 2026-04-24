@@ -1,11 +1,11 @@
 import axios, { type AxiosError } from "axios";
 import Constants from "expo-constants";
-import { router } from "expo-router";
+import { router, type Href } from "expo-router";
 import { Platform } from "react-native";
-import { queryClient } from "@/src/lib/queryClient";
+import { resetClientSessionState } from "@/src/lib/resetClientSessionState";
 import { supabase } from "@/src/lib/supabase";
+import { getApiErrorCode } from "@/src/shared/utils/apiError";
 import { useAuthStore } from "@/src/store/authStore";
-import { useOrgStore } from "@/src/store/orgStore";
 
 type ExpoHostMetadata = {
   expoConfig?: {
@@ -85,13 +85,22 @@ export const apiClient = axios.create({
 });
 
 apiClient.interceptors.request.use(async (config) => {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+  const storeSession = useAuthStore.getState().session;
+  
+  // OPTIMIZATION: Try store session first (already in memory from signIn response)
+  // Only call getSession() if store is empty (to catch token refreshes from supabase)
+  let accessToken: string | undefined = storeSession?.access_token;
+  
+  if (!accessToken) {
+    const {
+      data: { session: supabaseSession },
+    } = await supabase.auth.getSession();
+    accessToken = supabaseSession?.access_token;
+  }
 
-  if (session?.access_token) {
+  if (accessToken) {
     config.headers = config.headers ?? {};
-    config.headers.Authorization = `Bearer ${session.access_token}`;
+    config.headers.Authorization = `Bearer ${accessToken}`;
   }
 
   return config;
@@ -101,13 +110,23 @@ apiClient.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
     const statusCode = error.response?.status;
+    const code = getApiErrorCode(error);
 
     if (statusCode === 401) {
       await supabase.auth.signOut();
-      useAuthStore.getState().clearAuth();
-      useOrgStore.getState().clearOrg();
-      queryClient.clear();
-      router.replace("/login");
+      resetClientSessionState();
+      router.replace("/(auth)/login");
+    }
+
+    if (statusCode === 403 && code === "ACCOUNT_SUSPENDED") {
+      await supabase.auth.signOut();
+      resetClientSessionState();
+      router.replace("/(auth)/login");
+    }
+
+    if (statusCode === 403 && code === "EMAIL_NOT_VERIFIED") {
+      useAuthStore.getState().setEmailVerified(false);
+      router.replace("/(verify)/verify-email" as Href);
     }
 
     return Promise.reject(error);

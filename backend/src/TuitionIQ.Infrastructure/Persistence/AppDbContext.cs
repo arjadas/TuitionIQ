@@ -10,6 +10,10 @@ public class AppDbContext : DbContext, IAppDbContext
   {
   }
 
+  protected AppDbContext(DbContextOptions options) : base(options)
+  {
+  }
+
   public DbSet<User> Users => Set<User>();
   public DbSet<Organization> Organizations => Set<Organization>();
   public DbSet<OrganizationMember> OrganizationMembers => Set<OrganizationMember>();

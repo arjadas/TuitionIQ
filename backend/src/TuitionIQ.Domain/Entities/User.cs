@@ -9,6 +9,7 @@ public class User
   public string LastName { get; set; } = string.Empty;
   public string? Phone { get; set; }
   public string? AvatarUrl { get; set; }
+  public bool EmailVerified { get; set; }
   public bool IsActive { get; set; }
   public DateTimeOffset CreatedAt { get; set; }
   public DateTimeOffset UpdatedAt { get; set; }
