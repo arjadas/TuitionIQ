@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { AxiosError } from "axios";
 import { authService } from "@/src/features/auth/services/authService";
 import { usersApiClient } from "@/src/features/users/services/usersApiClient";
+import { resetClientSessionState } from "@/src/lib/resetClientSessionState";
 import { supabase } from "@/src/lib/supabase";
 import { getApiErrorCode } from "@/src/shared/utils/apiError";
 import { useAuthStore } from "@/src/store/authStore";
@@ -52,7 +53,6 @@ export function useAuthSession(options: UseAuthSessionOptions = {}): void {
   const setUser = useAuthStore((state) => state.setUser);
   const setEmailVerified = useAuthStore((state) => state.setEmailVerified);
   const setInitialised = useAuthStore((state) => state.setInitialised);
-  const clearAuth = useAuthStore((state) => state.clearAuth);
 
   useEffect(() => {
     let isMounted = true;
@@ -93,7 +93,7 @@ export function useAuthSession(options: UseAuthSessionOptions = {}): void {
         if (isAccountSuspendedResponse(error)) {
           await authService.signOut();
           if (isMounted) {
-            clearAuth();
+            resetClientSessionState();
           }
           return;
         }
@@ -116,7 +116,7 @@ export function useAuthSession(options: UseAuthSessionOptions = {}): void {
         if (isInvalidRefreshTokenError(error.message)) {
           await authService.signOut();
           if (isMounted) {
-            clearAuth();
+            resetClientSessionState();
             setInitialised(true);
           }
           return;
@@ -150,7 +150,7 @@ export function useAuthSession(options: UseAuthSessionOptions = {}): void {
 
       if (event === "SIGNED_OUT") {
         if (isMounted) {
-          clearAuth();
+          resetClientSessionState();
           setInitialised(true);
         }
 
@@ -171,5 +171,5 @@ export function useAuthSession(options: UseAuthSessionOptions = {}): void {
       isMounted = false;
       subscription.unsubscribe();
     };
-  }, [clearAuth, onPasswordRecovery, onSignedOut, setEmailVerified, setInitialised, setSession, setUser]);
+  }, [onPasswordRecovery, onSignedOut, setEmailVerified, setInitialised, setSession, setUser]);
 }

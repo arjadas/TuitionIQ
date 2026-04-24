@@ -1,6 +1,7 @@
 import { AxiosError } from "axios";
 import { authService } from "@/src/features/auth/services/authService";
 import { usersApiClient } from "@/src/features/users/services/usersApiClient";
+import { resetClientSessionState } from "@/src/lib/resetClientSessionState";
 import { getApiErrorCode, getApiErrorMessage as getParsedApiErrorMessage } from "@/src/shared/utils/apiError";
 import { useAuthStore } from "@/src/store/authStore";
 
@@ -72,7 +73,6 @@ function getSessionEmail(email: string | null | undefined): string {
 
 export function useEmailVerification() {
   const setEmailVerified = useAuthStore((state) => state.setEmailVerified);
-  const clearAuth = useAuthStore((state) => state.clearAuth);
 
   const getValidatedSession = async (): Promise<Awaited<ReturnType<typeof authService.getSession>>["data"]["session"]> => {
     const {
@@ -88,7 +88,7 @@ export function useEmailVerification() {
 
     if (isInvalidRefreshTokenError(error.message)) {
       await authService.signOut();
-      clearAuth();
+      resetClientSessionState();
       throw new Error("Your session expired. Please sign in again.");
     }
 

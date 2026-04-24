@@ -1,7 +1,7 @@
 import { useAuthSession } from "@/src/features/auth/hooks/useAuthSession";
 import { queryClient } from "@/src/lib/queryClient";
 import { useAuthStore } from "@/src/store/authStore";
-import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import * as SplashScreen from "expo-splash-screen";
 import { router, Stack, type Href } from "expo-router";
 import { AppState, type AppStateStatus, Platform } from "react-native";
@@ -11,7 +11,6 @@ import { supabase } from "@/src/lib/supabase";
 void SplashScreen.preventAutoHideAsync();
 
 function RootNavigator() {
-  const appQueryClient = useQueryClient();
   const isAutoRefreshRunning = useRef(false);
   const isInitialised = useAuthStore((state) => state.isInitialised);
 
@@ -19,13 +18,8 @@ function RootNavigator() {
     router.replace("/(auth)/reset-password" as Href);
   }, []);
 
-  const handleSignedOut = useCallback(() => {
-    appQueryClient.clear();
-  }, [appQueryClient]);
-
   useAuthSession({
     onPasswordRecovery: handlePasswordRecovery,
-    onSignedOut: handleSignedOut,
   });
 
   useEffect(() => {

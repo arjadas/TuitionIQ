@@ -121,7 +121,6 @@ Set backend configuration (environment variables or user-secrets):
 ```bash
 ConnectionStrings__DefaultConnection=Host=<host>;Port=5432;Database=<db>;Username=<user>;Password=<password>;SSL Mode=Require;Trust Server Certificate=true
 Supabase__ProjectRef=<your-project-ref>
-Supabase__JwtSecret=<your-supabase-jwt-secret>
 App__AllowedOrigins__0=http://localhost:8081
 ```
 
@@ -188,7 +187,7 @@ JWT validation note:
 
 - The API validates Supabase access tokens using the project's OIDC metadata/JWKS published by Supabase.
 - Do not configure `Supabase__JwtSecret`; shared-secret JWT validation is no longer used by the backend.
-Security reminder:
+  Security reminder:
 
 - Do not expose backend secrets to frontend env files.
 - Frontend `EXPO_PUBLIC_*` values are public-by-design.

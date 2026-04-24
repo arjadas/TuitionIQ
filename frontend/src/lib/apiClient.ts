@@ -2,11 +2,10 @@ import axios, { type AxiosError } from "axios";
 import Constants from "expo-constants";
 import { router, type Href } from "expo-router";
 import { Platform } from "react-native";
-import { queryClient } from "@/src/lib/queryClient";
+import { resetClientSessionState } from "@/src/lib/resetClientSessionState";
 import { supabase } from "@/src/lib/supabase";
 import { getApiErrorCode } from "@/src/shared/utils/apiError";
 import { useAuthStore } from "@/src/store/authStore";
-import { useOrgStore } from "@/src/store/orgStore";
 
 type ExpoHostMetadata = {
   expoConfig?: {
@@ -115,17 +114,13 @@ apiClient.interceptors.response.use(
 
     if (statusCode === 401) {
       await supabase.auth.signOut();
-      useAuthStore.getState().clearAuth();
-      useOrgStore.getState().clearOrg();
-      queryClient.clear();
+      resetClientSessionState();
       router.replace("/(auth)/login");
     }
 
     if (statusCode === 403 && code === "ACCOUNT_SUSPENDED") {
       await supabase.auth.signOut();
-      useAuthStore.getState().clearAuth();
-      useOrgStore.getState().clearOrg();
-      queryClient.clear();
+      resetClientSessionState();
       router.replace("/(auth)/login");
     }
 
