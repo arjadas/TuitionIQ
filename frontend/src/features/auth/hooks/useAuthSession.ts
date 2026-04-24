@@ -3,6 +3,7 @@ import { AxiosError } from "axios";
 import { authService } from "@/src/features/auth/services/authService";
 import { usersApiClient } from "@/src/features/users/services/usersApiClient";
 import { supabase } from "@/src/lib/supabase";
+import { getApiErrorCode } from "@/src/shared/utils/apiError";
 import { useAuthStore } from "@/src/store/authStore";
 
 type UseAuthSessionOptions = {
@@ -10,16 +11,12 @@ type UseAuthSessionOptions = {
   onSignedOut?: () => void;
 };
 
-type ApiErrorResponse = {
-  code?: string;
-};
-
 function isEmailNotVerifiedResponse(error: unknown): boolean {
   if (!(error instanceof AxiosError)) {
     return false;
   }
 
-  const code = (error.response?.data as ApiErrorResponse | undefined)?.code;
+  const code = getApiErrorCode(error);
   if (error.response?.status !== 403) {
     return false;
   }
@@ -37,7 +34,7 @@ function isAccountSuspendedResponse(error: unknown): boolean {
     return false;
   }
 
-  const code = (error.response?.data as ApiErrorResponse | undefined)?.code;
+  const code = getApiErrorCode(error);
   return error.response?.status === 403 && code === "ACCOUNT_SUSPENDED";
 }
 

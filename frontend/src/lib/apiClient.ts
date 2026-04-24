@@ -4,6 +4,7 @@ import { router, type Href } from "expo-router";
 import { Platform } from "react-native";
 import { queryClient } from "@/src/lib/queryClient";
 import { supabase } from "@/src/lib/supabase";
+import { getApiErrorCode } from "@/src/shared/utils/apiError";
 import { useAuthStore } from "@/src/store/authStore";
 import { useOrgStore } from "@/src/store/orgStore";
 
@@ -110,8 +111,7 @@ apiClient.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
     const statusCode = error.response?.status;
-    const responseData = error.response?.data as { code?: string } | undefined;
-    const code = responseData?.code;
+    const code = getApiErrorCode(error);
 
     if (statusCode === 401) {
       await supabase.auth.signOut();

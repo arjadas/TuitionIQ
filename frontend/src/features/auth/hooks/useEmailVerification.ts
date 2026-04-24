@@ -1,14 +1,8 @@
 import { AxiosError } from "axios";
 import { authService } from "@/src/features/auth/services/authService";
 import { usersApiClient } from "@/src/features/users/services/usersApiClient";
+import { getApiErrorCode, getApiErrorMessage as getParsedApiErrorMessage } from "@/src/shared/utils/apiError";
 import { useAuthStore } from "@/src/store/authStore";
-
-type ApiErrorResponse = {
-  code?: string;
-  detail?: string;
-  message?: string;
-  title?: string;
-};
 
 function debugAuthVerification(message: string, payload?: unknown): void {
   if (!__DEV__) {
@@ -28,7 +22,7 @@ function isEmailNotVerifiedResponse(error: unknown): boolean {
     return false;
   }
 
-  const code = (error.response?.data as ApiErrorResponse | undefined)?.code;
+  const code = getApiErrorCode(error);
   if (error.response?.status !== 403) {
     return false;
   }
@@ -56,19 +50,9 @@ function isInvalidRefreshTokenError(errorMessage: string | null | undefined): bo
 }
 
 function getVerificationErrorMessage(error: unknown, fallbackMessage: string): string {
-  if (error instanceof AxiosError) {
-    const responseData = error.response?.data as ApiErrorResponse | undefined;
-    if (responseData?.detail && responseData.detail.trim().length > 0) {
-      return responseData.detail;
-    }
-
-    if (responseData?.message && responseData.message.trim().length > 0) {
-      return responseData.message;
-    }
-
-    if (responseData?.title && responseData.title.trim().length > 0) {
-      return responseData.title;
-    }
+  const apiErrorMessage = getParsedApiErrorMessage(error);
+  if (apiErrorMessage) {
+    return apiErrorMessage;
   }
 
   if (error instanceof Error && error.message.trim().length > 0) {
@@ -149,7 +133,7 @@ export function useEmailVerification() {
       if (error instanceof AxiosError && __DEV__) {
         console.error("[auth/verification] API error:", {
           status: error.response?.status,
-          code: (error.response?.data as { code?: string } | undefined)?.code,
+          code: getApiErrorCode(error),
           message: error.message,
           url: error.config?.url,
         });

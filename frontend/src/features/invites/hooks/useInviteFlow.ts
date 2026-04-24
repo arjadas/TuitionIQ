@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useEmailVerification } from "@/src/features/auth/hooks/useEmailVerification";
 import { authService } from "@/src/features/auth/services/authService";
 import { invitesApiClient } from "@/src/features/invites/services/invitesApiClient";
+import { getApiErrorCode } from "@/src/shared/utils/apiError";
 import { validatePassword } from "@/src/shared/utils/passwordValidation";
 import { useAuthStore } from "@/src/store/authStore";
 import { useOrgStore } from "@/src/store/orgStore";
@@ -18,14 +19,10 @@ type UseInviteFlowArgs = {
   initialEmail: string | null;
 };
 
-type ApiErrorResponse = {
-  code?: string;
-};
-
 function getApiErrorMessage(error: unknown, fallbackMessage: string): string {
   if (error instanceof AxiosError) {
-    const responseData = error.response?.data as ApiErrorResponse | undefined;
-    if (error.response?.status === 403 && responseData?.code === "EMAIL_NOT_VERIFIED") {
+    const code = getApiErrorCode(error);
+    if (error.response?.status === 403 && code === "EMAIL_NOT_VERIFIED") {
       return "Verify your email first to accept this invite.";
     }
 
