@@ -12,13 +12,14 @@ function isInvalidCredentialsError(message: string): boolean {
 
 export default function LoginScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ email?: string }>();
+  const params = useLocalSearchParams<{ email?: string; message?: string}>();
   const { refreshEmailVerificationStatus } = useEmailVerification();
   const setSession = useAuthStore((state) => state.setSession);
   const setUser = useAuthStore((state) => state.setUser);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [failedAttempts, setFailedAttempts] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -28,6 +29,15 @@ export default function LoginScreen() {
       setEmail(params.email.trim().toLowerCase());
     }
   }, [params.email]);
+
+  useEffect(() => {
+    if (typeof params.message === "string" && params.message.trim().length > 0) {
+      setSuccessMessage(params.message);
+
+      // Clear the param so it doesn't persist
+      router.setParams({ message: "" });
+    }
+  }, [params.message, router]);
 
   const showForgotPasswordCta = failedAttempts >= 5;
 
@@ -126,6 +136,8 @@ export default function LoginScreen() {
           )}
         </Pressable>
 
+        {successMessage ? <Text style={styles.successText}>{successMessage}</Text> : null}
+
         {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
 
         {showForgotPasswordCta ? (
@@ -221,6 +233,10 @@ const styles = StyleSheet.create({
   },
   errorText: {
     color: "#bb1f1f",
+    fontSize: 14,
+  },
+  successText: {
+    color: "#15803d",
     fontSize: 14,
   },
   prominentCta: {

@@ -97,7 +97,12 @@ export default function ResetPasswordScreen() {
     setSuccessMessage("Your password has been updated. Please log in with your new password.");
     setIsSubmitting(false);
 
-    router.replace("/(auth)/login");
+    router.replace({
+      pathname: "/(auth)/login",
+      params: {
+        message: "Your password has been updated. Please log in with your new password.",
+      },
+    });
   };
 
   if (isPreparing) {
