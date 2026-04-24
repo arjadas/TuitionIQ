@@ -181,10 +181,13 @@ Platform URL guidance:
 ### Backend
 
 - `ConnectionStrings__DefaultConnection`: Postgres connection string.
-- `Supabase__ProjectRef`: Supabase project ref for JWT issuer validation.
-- `Supabase__JwtSecret`: JWT signing secret used by API token validation.
+- `Supabase__ProjectRef`: Supabase project ref used to resolve the Supabase issuer / OIDC metadata for JWT validation.
 - `App__AllowedOrigins__*`: Allowed origins for mutating requests.
 
+JWT validation note:
+
+- The API validates Supabase access tokens using the project's OIDC metadata/JWKS published by Supabase.
+- Do not configure `Supabase__JwtSecret`; shared-secret JWT validation is no longer used by the backend.
 Security reminder:
 
 - Do not expose backend secrets to frontend env files.
