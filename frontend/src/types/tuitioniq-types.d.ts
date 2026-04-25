@@ -40,5 +40,56 @@ declare module "@tuitioniq/types" {
     settings?: unknown;
   };
 
+  export type StudentDto = {
+    id: string;
+    organizationId: string;
+    userId?: string | null;
+    firstName: string;
+    lastName: string;
+    email?: string | null;
+    phone?: string | null;
+    notes?: string | null;
+    status: string;
+    accountStatus: string;
+    metadata?: Record<string, unknown> | null;
+    createdAt: string;
+    updatedAt: string;
+  };
+
+  export type StudentSummaryDto = {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email?: string | null;
+    status: string;
+    accountStatus: string;
+    createdAt: string;
+  };
+
+  export type CreateStudentRequest = {
+    firstName: string;
+    lastName: string;
+    email?: string | null;
+    phone?: string | null;
+    notes?: string | null;
+    metadata?: Record<string, unknown> | null;
+  };
+
+  export type UpdateStudentRequest = {
+    firstName?: string | null;
+    lastName?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    notes?: string | null;
+    metadata?: Record<string, unknown> | null;
+  };
+
+  export type PagedResultOfStudentSummaryDto = {
+    items: StudentSummaryDto[];
+    page: number;
+    pageSize: number;
+    totalCount: number;
+  };
+
   export type OrganizationMembershipDto = MembershipDto;
 }
