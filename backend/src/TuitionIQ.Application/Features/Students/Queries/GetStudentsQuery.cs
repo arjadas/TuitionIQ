@@ -1,5 +1,6 @@
 using FluentValidation;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using TuitionIQ.Application.Common.Exceptions;
 using TuitionIQ.Application.Common.Interfaces;
 using TuitionIQ.Application.Common.Models;
@@ -75,10 +76,10 @@ public sealed class GetStudentsQueryHandler : IRequestHandler<GetStudentsQuery, 
 
     if (!string.IsNullOrWhiteSpace(request.Search))
     {
-      var normalizedSearch = request.Search.Trim().ToLower();
+      var pattern = $"%{request.Search.Trim()}%";
       studentsQuery = studentsQuery.Where(student =>
-        student.FirstName.ToLower().Contains(normalizedSearch)
-        || student.LastName.ToLower().Contains(normalizedSearch));
+        EF.Functions.ILike(student.FirstName, pattern)
+        || EF.Functions.ILike(student.LastName, pattern));
     }
 
     var totalCount = await _dbContext.CountAsync(studentsQuery, cancellationToken);
