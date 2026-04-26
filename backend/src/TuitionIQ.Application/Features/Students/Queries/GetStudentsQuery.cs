@@ -19,13 +19,17 @@ public sealed record GetStudentsQuery(
 
 public sealed class GetStudentsQueryValidator : AbstractValidator<GetStudentsQuery>
 {
+  private const int MaxPageSize = 100;
+
   public GetStudentsQueryValidator()
   {
     RuleFor(query => query.Page)
       .GreaterThan(0);
 
     RuleFor(query => query.PageSize)
-      .GreaterThan(0);
+      .GreaterThan(0)
+      .LessThanOrEqualTo(MaxPageSize)
+      .WithMessage($"PageSize must be between 1 and {MaxPageSize}.");
 
     RuleFor(query => query.Status)
       .Must(BeValidStatus)
