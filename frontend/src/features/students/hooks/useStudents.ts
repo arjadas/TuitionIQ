@@ -11,6 +11,7 @@ import type {
   UpdateStudentRequest,
 } from "@tuitioniq/types";
 import { useMemo } from "react";
+import { studentQueryKey } from "@/src/features/students/hooks/useStudent";
 import { studentsApiClient } from "@/src/features/students/services/studentsApiClient";
 
 export type StudentsStatusFilter = "all" | "Active" | "Inactive" | "Graduated";
@@ -113,7 +114,7 @@ export function useUpdateStudent(orgId: string | null) {
     },
     onSuccess: async (_, variables) => {
       await queryClient.invalidateQueries({ queryKey: studentsOrgQueryKey(orgId) });
-      await queryClient.invalidateQueries({ queryKey: ["student", orgId, variables.studentId] });
+      await queryClient.invalidateQueries({ queryKey: studentQueryKey(orgId, variables.studentId) });
     },
   });
 }
@@ -131,7 +132,7 @@ export function useDeleteStudent(orgId: string | null) {
     },
     onSuccess: async (_, variables) => {
       await queryClient.invalidateQueries({ queryKey: studentsOrgQueryKey(orgId) });
-      await queryClient.removeQueries({ queryKey: ["student", orgId, variables.studentId] });
+      await queryClient.removeQueries({ queryKey: studentQueryKey(orgId, variables.studentId) });
     },
   });
 }
