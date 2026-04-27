@@ -31,6 +31,8 @@ public class AppDbContext : DbContext, IAppDbContext
   IQueryable<Student> IAppDbContext.Students => Students;
   IQueryable<TeacherStudent> IAppDbContext.TeacherStudents => TeacherStudents;
   IQueryable<StudentFee> IAppDbContext.StudentFees => StudentFees;
+  IQueryable<FeePeriod> IAppDbContext.FeePeriods => FeePeriods;
+  IQueryable<FeePayment> IAppDbContext.FeePayments => FeePayments;
 
   public IQueryable<Student> ApplyStudentNameSearch(IQueryable<Student> query, string pattern)
   {
