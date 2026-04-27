@@ -48,19 +48,6 @@ public sealed class WaivePeriodCommandHandler : IRequestHandler<WaivePeriodComma
         cancellationToken);
     }
 
-    IQueryable<Guid> feePeriodIdQuery = _dbContext.FeePeriods
-      .Where(feePeriod =>
-        feePeriod.Id == request.FeePeriodId
-        && feePeriod.OrganizationId == request.OrganizationId
-        && feePeriod.StudentId == request.StudentId)
-      .Select(feePeriod => feePeriod.Id);
-
-    var existingFeePeriodId = await _dbContext.FirstOrDefaultAsync(feePeriodIdQuery, cancellationToken);
-    if (existingFeePeriodId == Guid.Empty)
-    {
-      throw new NotFoundException($"Fee period with id '{request.FeePeriodId}' was not found.");
-    }
-
     await using var transaction = await _dbContext.BeginTransactionAsync(cancellationToken);
     try
     {

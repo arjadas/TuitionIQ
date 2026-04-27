@@ -82,7 +82,10 @@ public sealed class ReversePaymentCommandHandler : IRequestHandler<ReversePaymen
       var previousStatus = feePeriod.Status;
 
       feePeriod.AmountPaid = totalPaid;
-      feePeriod.Status = FeePeriodStatusCalculator.Derive(feePeriod.Fee, totalPaid);
+      feePeriod.Status = FeePeriodStatusCalculator.DeriveForCurrentStatus(
+        feePeriod.Status,
+        feePeriod.Fee,
+        totalPaid);
       feePeriod.UpdatedAt = now;
 
       _auditLogService.Add(new AuditLog(Guid.NewGuid(), "fee_payment.reversed", "fee_payments", now)

@@ -2,6 +2,7 @@ using MediatR;
 using TuitionIQ.Application.Common.Exceptions;
 using TuitionIQ.Application.Common.Interfaces;
 using TuitionIQ.Application.Features.Billing.Dtos;
+using TuitionIQ.Domain.Enums;
 
 namespace TuitionIQ.Application.Features.Billing.Queries;
 
@@ -25,11 +26,21 @@ public sealed class GetStudentFeeHistoryQueryHandler : IRequestHandler<GetStuden
     GetStudentFeeHistoryQuery request,
     CancellationToken cancellationToken)
   {
-    await _organizationAuthorizationService.RequireTeacherOrHigherAsync(
+    var callerRole = await _organizationAuthorizationService.RequireTeacherOrHigherAsync(
       request.OrganizationId,
       request.UserId,
       "You are not allowed to view fee history for this student.",
       cancellationToken);
+
+    if (callerRole == OrganizationMemberRole.Teacher)
+    {
+      await _organizationAuthorizationService.EnsureTeacherHasStudentAccessAsync(
+        request.OrganizationId,
+        request.UserId,
+        request.StudentId,
+        "You are not allowed to view fee history for this student.",
+        cancellationToken);
+    }
 
     IQueryable<Guid> studentExistsQuery = _dbContext.Students
       .Where(student => student.OrganizationId == request.OrganizationId && student.Id == request.StudentId)

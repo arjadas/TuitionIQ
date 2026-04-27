@@ -1,6 +1,5 @@
 using FluentValidation;
 using MediatR;
-using Microsoft.Extensions.Logging;
 using TuitionIQ.Application.Common.Exceptions;
 using TuitionIQ.Application.Common.Interfaces;
 using TuitionIQ.Application.Features.Billing.Dtos;
@@ -72,18 +71,15 @@ public sealed class RecordPaymentCommandHandler : IRequestHandler<RecordPaymentC
   private readonly IAppDbContext _dbContext;
   private readonly IAuditLogService _auditLogService;
   private readonly IOrganizationAuthorizationService _organizationAuthorizationService;
-  private readonly ILogger<RecordPaymentCommandHandler> _logger;
 
   public RecordPaymentCommandHandler(
     IAppDbContext dbContext,
     IAuditLogService auditLogService,
-    IOrganizationAuthorizationService organizationAuthorizationService,
-    ILogger<RecordPaymentCommandHandler> logger)
+    IOrganizationAuthorizationService organizationAuthorizationService)
   {
     _dbContext = dbContext;
     _auditLogService = auditLogService;
     _organizationAuthorizationService = organizationAuthorizationService;
-    _logger = logger;
   }
 
   public async Task<FeePeriodDto> Handle(RecordPaymentCommand request, CancellationToken cancellationToken)
@@ -95,14 +91,7 @@ public sealed class RecordPaymentCommandHandler : IRequestHandler<RecordPaymentC
 
     var paymentDate = request.PaymentDate;
     var today = DateOnly.FromDateTime(DateTime.UtcNow);
-    if (paymentDate < today.AddDays(-7))
-    {
-      _logger.LogWarning(
-        "Recording backdated payment older than 7 days. StudentId: {StudentId}, FeePeriodId: {FeePeriodId}, PaymentDate: {PaymentDate}",
-        request.StudentId,
-        request.FeePeriodId,
-        paymentDate);
-    }
+    var isBackdatedMoreThan7Days = paymentDate < today.AddDays(-7);
 
     var feePeriodSnapshot = await GetFeePeriodSnapshotAsync(request.StudentId, request.FeePeriodId, cancellationToken);
 
@@ -127,6 +116,10 @@ public sealed class RecordPaymentCommandHandler : IRequestHandler<RecordPaymentC
     {
       var now = DateTimeOffset.UtcNow;
       var normalizedCurrency = request.Currency.Trim().ToUpperInvariant();
+      if (!string.Equals(normalizedCurrency, feePeriodSnapshot.Currency, StringComparison.OrdinalIgnoreCase))
+      {
+        throw new ConflictException("Payment currency must match the fee period currency.");
+      }
 
       var feePayment = new FeePayment
       {
@@ -160,7 +153,10 @@ public sealed class RecordPaymentCommandHandler : IRequestHandler<RecordPaymentC
       var previousStatus = feePeriod.Status;
 
       feePeriod.AmountPaid = totalPaid;
-      feePeriod.Status = FeePeriodStatusCalculator.Derive(feePeriod.Fee, totalPaid);
+      feePeriod.Status = FeePeriodStatusCalculator.DeriveForCurrentStatus(
+        feePeriod.Status,
+        feePeriod.Fee,
+        totalPaid);
       feePeriod.UpdatedAt = now;
 
       _auditLogService.Add(new AuditLog(Guid.NewGuid(), "fee_payment.recorded", "fee_payments", now)
@@ -178,6 +174,7 @@ public sealed class RecordPaymentCommandHandler : IRequestHandler<RecordPaymentC
           ["payment_method"] = feePayment.PaymentMethod.ToString(),
           ["reference"] = feePayment.Reference,
           ["notes"] = feePayment.Notes,
+          ["is_backdated_more_than_7_days"] = isBackdatedMoreThan7Days,
           ["period_amount_paid_before"] = previousAmountPaid,
           ["period_amount_paid_after"] = feePeriod.AmountPaid,
           ["period_status_before"] = previousStatus.ToString(),
@@ -208,7 +205,8 @@ public sealed class RecordPaymentCommandHandler : IRequestHandler<RecordPaymentC
       {
         Id = feePeriod.Id,
         OrganizationId = feePeriod.OrganizationId,
-        StudentId = feePeriod.StudentId
+        StudentId = feePeriod.StudentId,
+        Currency = feePeriod.Currency
       });
 
     var feePeriodSnapshot = await _dbContext.FirstOrDefaultAsync(feePeriodQuery, cancellationToken);
@@ -277,6 +275,7 @@ public sealed class RecordPaymentCommandHandler : IRequestHandler<RecordPaymentC
     public Guid Id { get; init; }
     public Guid OrganizationId { get; init; }
     public Guid StudentId { get; init; }
+    public string Currency { get; init; } = string.Empty;
   }
 }
 
@@ -298,6 +297,19 @@ internal static class PaymentMethodParser
 
 internal static class FeePeriodStatusCalculator
 {
+  public static FeePeriodStatus DeriveForCurrentStatus(
+    FeePeriodStatus currentStatus,
+    long fee,
+    long amountPaid)
+  {
+    if (currentStatus is FeePeriodStatus.Waived or FeePeriodStatus.Overdue)
+    {
+      return currentStatus;
+    }
+
+    return Derive(fee, amountPaid);
+  }
+
   public static FeePeriodStatus Derive(long fee, long amountPaid)
   {
     if (amountPaid <= 0)
