@@ -31,6 +31,13 @@ public class AppDbContext : DbContext, IAppDbContext
   IQueryable<Student> IAppDbContext.Students => Students;
   IQueryable<TeacherStudent> IAppDbContext.TeacherStudents => TeacherStudents;
 
+  public IQueryable<Student> ApplyStudentNameSearch(IQueryable<Student> query, string pattern)
+  {
+    return query.Where(student =>
+      EF.Functions.ILike(student.FirstName, pattern)
+      || EF.Functions.ILike(student.LastName, pattern));
+  }
+
   protected override void OnModelCreating(ModelBuilder modelBuilder)
   {
     modelBuilder.HasDefaultSchema("public");
