@@ -2,7 +2,7 @@ import axios, { type AxiosError } from "axios";
 import Constants from "expo-constants";
 import { router, type Href } from "expo-router";
 import { Platform } from "react-native";
-import { resetClientSessionState } from "@/src/lib/resetClientSessionState";
+import { forceClientSignOut } from "@/src/lib/forceClientSignOut";
 import { supabase } from "@/src/lib/supabase";
 import { getApiErrorCode } from "@/src/shared/utils/apiError";
 import { useAuthStore } from "@/src/store/authStore";
@@ -113,15 +113,11 @@ apiClient.interceptors.response.use(
     const code = getApiErrorCode(error);
 
     if (statusCode === 401) {
-      await supabase.auth.signOut();
-      resetClientSessionState();
-      router.replace("/(auth)/login");
+      await forceClientSignOut({ redirectTo: "/(auth)/login" });
     }
 
     if (statusCode === 403 && code === "ACCOUNT_SUSPENDED") {
-      await supabase.auth.signOut();
-      resetClientSessionState();
-      router.replace("/(auth)/login");
+      await forceClientSignOut({ redirectTo: "/(auth)/login" });
     }
 
     if (statusCode === 403 && code === "EMAIL_NOT_VERIFIED") {

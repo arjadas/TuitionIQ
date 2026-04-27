@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { AxiosError } from "axios";
 import { authService } from "@/src/features/auth/services/authService";
+import { forceClientSignOut } from "@/src/lib/forceClientSignOut";
 import { usersApiClient } from "@/src/features/users/services/usersApiClient";
 import { resetClientSessionState } from "@/src/lib/resetClientSessionState";
 import { supabase } from "@/src/lib/supabase";
@@ -91,10 +92,7 @@ export function useAuthSession(options: UseAuthSessionOptions = {}): void {
         }
 
         if (isAccountSuspendedResponse(error)) {
-          await authService.signOut();
-          if (isMounted) {
-            resetClientSessionState();
-          }
+          await forceClientSignOut();
           return;
         }
 
@@ -114,9 +112,8 @@ export function useAuthSession(options: UseAuthSessionOptions = {}): void {
         console.log("[auth/session] getSession failed", { message: error.message });
 
         if (isInvalidRefreshTokenError(error.message)) {
-          await authService.signOut();
+          await forceClientSignOut();
           if (isMounted) {
-            resetClientSessionState();
             setInitialised(true);
           }
           return;
