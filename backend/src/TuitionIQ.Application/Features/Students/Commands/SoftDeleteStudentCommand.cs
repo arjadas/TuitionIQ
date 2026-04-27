@@ -12,46 +12,34 @@ public sealed class SoftDeleteStudentCommandHandler : IRequestHandler<SoftDelete
 {
   private readonly IAppDbContext _dbContext;
   private readonly IAuditLogService _auditLogService;
+  private readonly IOrganizationAuthorizationService _organizationAuthorizationService;
 
-  public SoftDeleteStudentCommandHandler(IAppDbContext dbContext, IAuditLogService auditLogService)
+  public SoftDeleteStudentCommandHandler(
+    IAppDbContext dbContext,
+    IAuditLogService auditLogService,
+    IOrganizationAuthorizationService organizationAuthorizationService)
   {
     _dbContext = dbContext;
     _auditLogService = auditLogService;
+    _organizationAuthorizationService = organizationAuthorizationService;
   }
 
   public async Task Handle(SoftDeleteStudentCommand request, CancellationToken cancellationToken)
   {
-    IQueryable<OrganizationMemberRole?> callerRoleQuery = _dbContext.OrganizationMembers
-      .Where(membership => membership.OrganizationId == request.OrganizationId && membership.UserId == request.UserId)
-      .Select(membership => (OrganizationMemberRole?)membership.Role);
-
-    var callerRole = await _dbContext.FirstOrDefaultAsync(callerRoleQuery, cancellationToken);
-    if (callerRole is null)
-    {
-      throw new ForbiddenException("You are not allowed to delete this student.");
-    }
-
-    if (callerRole is not OrganizationMemberRole.Owner
-        and not OrganizationMemberRole.Admin
-        and not OrganizationMemberRole.Teacher)
-    {
-      throw new ForbiddenException("You are not allowed to delete this student.");
-    }
+    var callerRole = await _organizationAuthorizationService.RequireTeacherOrHigherAsync(
+      request.OrganizationId,
+      request.UserId,
+      "You are not allowed to delete this student.",
+      cancellationToken);
 
     if (callerRole == OrganizationMemberRole.Teacher)
     {
-      IQueryable<Guid> teacherStudentLinkQuery = _dbContext.TeacherStudents
-        .Where(link =>
-          link.OrganizationId == request.OrganizationId
-          && link.TeacherId == request.UserId
-          && link.StudentId == request.StudentId)
-        .Select(link => link.Id);
-
-      var teacherStudentLinkId = await _dbContext.FirstOrDefaultAsync(teacherStudentLinkQuery, cancellationToken);
-      if (teacherStudentLinkId == Guid.Empty)
-      {
-        throw new ForbiddenException("You are not allowed to delete this student.");
-      }
+      await _organizationAuthorizationService.EnsureTeacherHasStudentAccessAsync(
+        request.OrganizationId,
+        request.UserId,
+        request.StudentId,
+        "You are not allowed to delete this student.",
+        cancellationToken);
     }
 
     await using var transaction = await _dbContext.BeginTransactionAsync(cancellationToken);

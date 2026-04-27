@@ -52,9 +52,43 @@ public sealed class OriginValidationMiddleware
 
   private bool IsAllowedOrigin(string origin)
   {
+    var normalizedOrigin = NormalizeOrigin(origin);
+    if (normalizedOrigin is null)
+    {
+      return false;
+    }
+
     return _allowedOrigins
-      .Where(static allowed => !string.IsNullOrWhiteSpace(allowed))
-      .Any(allowed => origin.StartsWith(allowed, StringComparison.OrdinalIgnoreCase));
+      .Select(NormalizeOrigin)
+      .Any(allowedOrigin =>
+        allowedOrigin is not null
+        && string.Equals(allowedOrigin, normalizedOrigin, StringComparison.OrdinalIgnoreCase));
+  }
+
+  private static string? NormalizeOrigin(string origin)
+  {
+    if (string.IsNullOrWhiteSpace(origin))
+    {
+      return null;
+    }
+
+    if (!Uri.TryCreate(origin, UriKind.Absolute, out var parsedOrigin))
+    {
+      return null;
+    }
+
+    if (string.IsNullOrWhiteSpace(parsedOrigin.Host))
+    {
+      return $"{parsedOrigin.Scheme}://";
+    }
+
+    var isDefaultPort = parsedOrigin.IsDefaultPort
+      || (string.Equals(parsedOrigin.Scheme, "http", StringComparison.OrdinalIgnoreCase) && parsedOrigin.Port == 80)
+      || (string.Equals(parsedOrigin.Scheme, "https", StringComparison.OrdinalIgnoreCase) && parsedOrigin.Port == 443);
+
+    return isDefaultPort
+      ? $"{parsedOrigin.Scheme}://{parsedOrigin.Host}"
+      : $"{parsedOrigin.Scheme}://{parsedOrigin.Host}:{parsedOrigin.Port}";
   }
 
   private static async Task WriteForbiddenAsync(HttpContext context, string origin)

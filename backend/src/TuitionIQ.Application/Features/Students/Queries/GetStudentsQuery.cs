@@ -1,6 +1,5 @@
 using FluentValidation;
 using MediatR;
-using TuitionIQ.Application.Common.Exceptions;
 using TuitionIQ.Application.Common.Interfaces;
 using TuitionIQ.Application.Common.Models;
 using TuitionIQ.Application.Features.Students.Dtos;
@@ -46,26 +45,35 @@ public sealed class GetStudentsQueryValidator : AbstractValidator<GetStudentsQue
 public sealed class GetStudentsQueryHandler : IRequestHandler<GetStudentsQuery, PagedResult<StudentSummaryDto>>
 {
   private readonly IAppDbContext _dbContext;
+  private readonly IOrganizationAuthorizationService _organizationAuthorizationService;
 
-  public GetStudentsQueryHandler(IAppDbContext dbContext)
+  public GetStudentsQueryHandler(
+    IAppDbContext dbContext,
+    IOrganizationAuthorizationService organizationAuthorizationService)
   {
     _dbContext = dbContext;
+    _organizationAuthorizationService = organizationAuthorizationService;
   }
 
   public async Task<PagedResult<StudentSummaryDto>> Handle(GetStudentsQuery request, CancellationToken cancellationToken)
   {
-    IQueryable<OrganizationMemberRole?> membershipRoleQuery = _dbContext.OrganizationMembers
-      .Where(membership => membership.OrganizationId == request.OrganizationId && membership.UserId == request.UserId)
-      .Select(membership => (OrganizationMemberRole?)membership.Role);
-
-    var callerRole = await _dbContext.FirstOrDefaultAsync(membershipRoleQuery, cancellationToken);
-    if (callerRole is null)
-    {
-      throw new ForbiddenException("You are not allowed to view students in this organization.");
-    }
+    var callerRole = await _organizationAuthorizationService.RequireTeacherOrHigherAsync(
+      request.OrganizationId,
+      request.UserId,
+      "You are not allowed to view students in this organization.",
+      cancellationToken);
 
     IQueryable<Student> studentsQuery = _dbContext.Students
       .Where(student => student.OrganizationId == request.OrganizationId);
+
+    if (callerRole == OrganizationMemberRole.Teacher)
+    {
+      IQueryable<Guid> teacherStudentIdsQuery = _dbContext.TeacherStudents
+        .Where(link => link.OrganizationId == request.OrganizationId && link.TeacherId == request.UserId)
+        .Select(link => link.StudentId);
+
+      studentsQuery = studentsQuery.Where(student => teacherStudentIdsQuery.Contains(student.Id));
+    }
 
     if (!string.IsNullOrWhiteSpace(request.Status)
         && Enum.TryParse<StudentStatus>(request.Status, true, out var parsedStatus))

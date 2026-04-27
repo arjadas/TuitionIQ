@@ -1,6 +1,5 @@
 using FluentValidation;
 using MediatR;
-using TuitionIQ.Application.Common.Exceptions;
 using TuitionIQ.Application.Common.Interfaces;
 using TuitionIQ.Application.Features.Students.Dtos;
 using TuitionIQ.Domain.Entities;
@@ -41,26 +40,25 @@ public sealed class CreateStudentCommandHandler : IRequestHandler<CreateStudentC
 {
   private readonly IAppDbContext _dbContext;
   private readonly IAuditLogService _auditLogService;
+  private readonly IOrganizationAuthorizationService _organizationAuthorizationService;
 
-  public CreateStudentCommandHandler(IAppDbContext dbContext, IAuditLogService auditLogService)
+  public CreateStudentCommandHandler(
+    IAppDbContext dbContext,
+    IAuditLogService auditLogService,
+    IOrganizationAuthorizationService organizationAuthorizationService)
   {
     _dbContext = dbContext;
     _auditLogService = auditLogService;
+    _organizationAuthorizationService = organizationAuthorizationService;
   }
 
   public async Task<StudentDto> Handle(CreateStudentCommand request, CancellationToken cancellationToken)
   {
-    IQueryable<OrganizationMemberRole?> callerRoleQuery = _dbContext.OrganizationMembers
-      .Where(membership => membership.OrganizationId == request.OrganizationId && membership.UserId == request.UserId)
-      .Select(membership => (OrganizationMemberRole?)membership.Role);
-
-    var callerRole = await _dbContext.FirstOrDefaultAsync(callerRoleQuery, cancellationToken);
-    if (callerRole is not OrganizationMemberRole.Owner
-        and not OrganizationMemberRole.Admin
-        and not OrganizationMemberRole.Teacher)
-    {
-      throw new ForbiddenException("You are not allowed to create students in this organization.");
-    }
+    var callerRole = await _organizationAuthorizationService.RequireTeacherOrHigherAsync(
+      request.OrganizationId,
+      request.UserId,
+      "You are not allowed to create students in this organization.",
+      cancellationToken);
 
     await using var transaction = await _dbContext.BeginTransactionAsync(cancellationToken);
     try

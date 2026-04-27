@@ -1,11 +1,10 @@
 using System.Text.Json;
 using FluentValidation;
 using MediatR;
-using TuitionIQ.Application.Common.Exceptions;
 using TuitionIQ.Application.Common.Interfaces;
 using TuitionIQ.Application.Features.Organizations.Dtos;
 using TuitionIQ.Domain.Entities;
-using TuitionIQ.Domain.Enums;
+using TuitionIQ.Application.Common.Exceptions;
 
 namespace TuitionIQ.Application.Features.Organizations.Commands;
 
@@ -35,11 +34,16 @@ public sealed class UpdateOrganizationCommandHandler : IRequestHandler<UpdateOrg
 {
   private readonly IAppDbContext _dbContext;
   private readonly IAuditLogService _auditLogService;
+  private readonly IOrganizationAuthorizationService _organizationAuthorizationService;
 
-  public UpdateOrganizationCommandHandler(IAppDbContext dbContext, IAuditLogService auditLogService)
+  public UpdateOrganizationCommandHandler(
+    IAppDbContext dbContext,
+    IAuditLogService auditLogService,
+    IOrganizationAuthorizationService organizationAuthorizationService)
   {
     _dbContext = dbContext;
     _auditLogService = auditLogService;
+    _organizationAuthorizationService = organizationAuthorizationService;
   }
 
   public async Task<OrganizationDto> Handle(UpdateOrganizationCommand request, CancellationToken cancellationToken)
@@ -53,15 +57,11 @@ public sealed class UpdateOrganizationCommandHandler : IRequestHandler<UpdateOrg
       throw new NotFoundException($"Organization with id '{request.OrganizationId}' was not found.");
     }
 
-    IQueryable<OrganizationMemberRole?> membershipRoleQuery = _dbContext.OrganizationMembers
-      .Where(membership => membership.OrganizationId == request.OrganizationId && membership.UserId == request.UserId)
-      .Select(membership => (OrganizationMemberRole?)membership.Role);
-
-    var callerRole = await _dbContext.FirstOrDefaultAsync(membershipRoleQuery, cancellationToken);
-    if (callerRole is not OrganizationMemberRole.Owner and not OrganizationMemberRole.Admin)
-    {
-      throw new ForbiddenException("You are not allowed to update this organization.");
-    }
+    await _organizationAuthorizationService.RequireOwnerOrAdminAsync(
+      request.OrganizationId,
+      request.UserId,
+      "You are not allowed to update this organization.",
+      cancellationToken);
 
     var oldValues = new Dictionary<string, object?>();
     var newValues = new Dictionary<string, object?>();

@@ -163,6 +163,24 @@ public sealed class UserActiveCheckMiddleware
     }
 
     context.Response.StatusCode = StatusCodes.Status403Forbidden;
-    await context.Response.WriteAsJsonAsync(new { code });
+
+    var problem = new ProblemDetails
+    {
+      Status = StatusCodes.Status403Forbidden,
+      Title = "Forbidden",
+      Type = "https://httpstatuses.com/403",
+      Instance = context.Request.Path,
+      Detail = code switch
+      {
+        "ACCOUNT_SUSPENDED" => "Your account has been suspended.",
+        "EMAIL_NOT_VERIFIED" => "Please verify your email before accessing this resource.",
+        _ => "Access denied."
+      }
+    };
+
+    problem.Extensions["code"] = code;  // Consistent with ExceptionHandlingMiddleware
+    problem.Extensions["traceId"] = context.TraceIdentifier;
+  
+    await context.Response.WriteAsJsonAsync(problem);
   }
 }

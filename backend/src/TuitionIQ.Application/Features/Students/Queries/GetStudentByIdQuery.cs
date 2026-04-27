@@ -11,22 +11,32 @@ public sealed record GetStudentByIdQuery(Guid OrganizationId, Guid StudentId, Gu
 public sealed class GetStudentByIdQueryHandler : IRequestHandler<GetStudentByIdQuery, StudentDto>
 {
   private readonly IAppDbContext _dbContext;
+  private readonly IOrganizationAuthorizationService _organizationAuthorizationService;
 
-  public GetStudentByIdQueryHandler(IAppDbContext dbContext)
+  public GetStudentByIdQueryHandler(
+    IAppDbContext dbContext,
+    IOrganizationAuthorizationService organizationAuthorizationService)
   {
     _dbContext = dbContext;
+    _organizationAuthorizationService = organizationAuthorizationService;
   }
 
   public async Task<StudentDto> Handle(GetStudentByIdQuery request, CancellationToken cancellationToken)
   {
-    IQueryable<OrganizationMemberRole?> membershipRoleQuery = _dbContext.OrganizationMembers
-      .Where(membership => membership.OrganizationId == request.OrganizationId && membership.UserId == request.UserId)
-      .Select(membership => (OrganizationMemberRole?)membership.Role);
+    var callerRole = await _organizationAuthorizationService.RequireTeacherOrHigherAsync(
+      request.OrganizationId,
+      request.UserId,
+      "You are not allowed to view this student.",
+      cancellationToken);
 
-    var callerRole = await _dbContext.FirstOrDefaultAsync(membershipRoleQuery, cancellationToken);
-    if (callerRole is null)
+    if (callerRole == OrganizationMemberRole.Teacher)
     {
-      throw new ForbiddenException("You are not allowed to view this student.");
+      await _organizationAuthorizationService.EnsureTeacherHasStudentAccessAsync(
+        request.OrganizationId,
+        request.UserId,
+        request.StudentId,
+        "You are not allowed to view this student.",
+        cancellationToken);
     }
 
     IQueryable<StudentDto> studentQuery = _dbContext.Students
