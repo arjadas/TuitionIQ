@@ -6,6 +6,7 @@ using TuitionIQ.Api.Extensions;
 using TuitionIQ.Api.Middleware;
 using TuitionIQ.Application.Common.Behaviors;
 using TuitionIQ.Application.Common.Interfaces;
+using TuitionIQ.Application.Common.Security;
 using TuitionIQ.Infrastructure.Auth;
 using TuitionIQ.Infrastructure.Persistence;
 
@@ -33,6 +34,7 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IAppDbContext>(serviceProvider => serviceProvider.GetRequiredService<AppDbContext>());
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddScoped<IAuditLogService, AuditLogService>();
+builder.Services.AddScoped<IOrganizationAuthorizationService, OrganizationAuthorizationService>();
 
 builder.Services.AddMediatR(configuration => configuration.RegisterServicesFromAssembly(applicationAssembly));
 builder.Services.AddValidatorsFromAssembly(applicationAssembly);

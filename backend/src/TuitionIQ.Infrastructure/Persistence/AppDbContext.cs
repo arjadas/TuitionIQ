@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using TuitionIQ.Application.Common.Interfaces;
 using TuitionIQ.Domain.Entities;
 
@@ -27,6 +28,15 @@ public class AppDbContext : DbContext, IAppDbContext
   IQueryable<User> IAppDbContext.Users => Users;
   IQueryable<Organization> IAppDbContext.Organizations => Organizations;
   IQueryable<OrganizationMember> IAppDbContext.OrganizationMembers => OrganizationMembers;
+  IQueryable<Student> IAppDbContext.Students => Students;
+  IQueryable<TeacherStudent> IAppDbContext.TeacherStudents => TeacherStudents;
+
+  public IQueryable<Student> ApplyStudentNameSearch(IQueryable<Student> query, string pattern)
+  {
+    return query.Where(student =>
+      EF.Functions.ILike(student.FirstName, pattern)
+      || EF.Functions.ILike(student.LastName, pattern));
+  }
 
   protected override void OnModelCreating(ModelBuilder modelBuilder)
   {
@@ -65,6 +75,17 @@ public class AppDbContext : DbContext, IAppDbContext
     AuditLogs.Add(auditLog);
   }
 
+  public async Task<IAppDbTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default)
+  {
+    if (string.Equals(Database.ProviderName, "Microsoft.EntityFrameworkCore.InMemory", StringComparison.OrdinalIgnoreCase))
+    {
+      return NoOpAppDbTransaction.Instance;
+    }
+
+    var transaction = await Database.BeginTransactionAsync(cancellationToken);
+    return new EfAppDbTransaction(transaction);
+  }
+
   public Task<T?> FirstOrDefaultAsync<T>(IQueryable<T> query, CancellationToken cancellationToken = default)
   {
     return EntityFrameworkQueryableExtensions.FirstOrDefaultAsync(query, cancellationToken);
@@ -73,6 +94,11 @@ public class AppDbContext : DbContext, IAppDbContext
   public Task<List<T>> ToListAsync<T>(IQueryable<T> query, CancellationToken cancellationToken = default)
   {
     return EntityFrameworkQueryableExtensions.ToListAsync(query, cancellationToken);
+  }
+
+  public Task<int> CountAsync<T>(IQueryable<T> query, CancellationToken cancellationToken = default)
+  {
+    return EntityFrameworkQueryableExtensions.CountAsync(query, cancellationToken);
   }
 
   private void EnsureAuditLogIsInsertOnly()
@@ -84,6 +110,55 @@ public class AppDbContext : DbContext, IAppDbContext
     if (invalidAuditLogEntry)
     {
       throw new InvalidOperationException("AuditLog is insert-only and cannot be modified or deleted.");
+    }
+  }
+
+  private sealed class EfAppDbTransaction : IAppDbTransaction
+  {
+    private readonly IDbContextTransaction _transaction;
+
+    public EfAppDbTransaction(IDbContextTransaction transaction)
+    {
+      _transaction = transaction;
+    }
+
+    public Task CommitAsync(CancellationToken cancellationToken = default)
+    {
+      return _transaction.CommitAsync(cancellationToken);
+    }
+
+    public Task RollbackAsync(CancellationToken cancellationToken = default)
+    {
+      return _transaction.RollbackAsync(cancellationToken);
+    }
+
+    public ValueTask DisposeAsync()
+    {
+      return _transaction.DisposeAsync();
+    }
+  }
+
+  private sealed class NoOpAppDbTransaction : IAppDbTransaction
+  {
+    public static NoOpAppDbTransaction Instance { get; } = new();
+
+    private NoOpAppDbTransaction()
+    {
+    }
+
+    public Task CommitAsync(CancellationToken cancellationToken = default)
+    {
+      return Task.CompletedTask;
+    }
+
+    public Task RollbackAsync(CancellationToken cancellationToken = default)
+    {
+      return Task.CompletedTask;
+    }
+
+    public ValueTask DisposeAsync()
+    {
+      return ValueTask.CompletedTask;
     }
   }
 }

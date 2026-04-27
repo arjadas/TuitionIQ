@@ -1,5 +1,5 @@
 import { useEmailVerification } from "@/src/features/auth/hooks/useEmailVerification";
-import { authService } from "@/src/features/auth/services/authService";
+import { forceClientSignOut } from "@/src/lib/forceClientSignOut";
 import { useAuthStore } from "@/src/store/authStore";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -127,8 +127,7 @@ export default function VerifyEmailScreen() {
   };
 
   const signOutAndUseDifferentAccount = async (): Promise<void> => {
-    await authService.signOut();
-    router.replace("/(auth)/login");
+    await forceClientSignOut({ redirectTo: "/(auth)/login" });
   };
 
   return (

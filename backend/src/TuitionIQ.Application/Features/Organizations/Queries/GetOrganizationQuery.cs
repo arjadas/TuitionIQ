@@ -10,42 +10,39 @@ public sealed record GetOrganizationQuery(Guid OrganizationId, Guid UserId) : IR
 public sealed class GetOrganizationQueryHandler : IRequestHandler<GetOrganizationQuery, OrganizationDto>
 {
   private readonly IAppDbContext _dbContext;
+  private readonly IOrganizationAuthorizationService _organizationAuthorizationService;
 
-  public GetOrganizationQueryHandler(IAppDbContext dbContext)
+  public GetOrganizationQueryHandler(
+    IAppDbContext dbContext,
+    IOrganizationAuthorizationService organizationAuthorizationService)
   {
     _dbContext = dbContext;
+    _organizationAuthorizationService = organizationAuthorizationService;
   }
 
   public async Task<OrganizationDto> Handle(GetOrganizationQuery request, CancellationToken cancellationToken)
   {
-    IQueryable<Guid> organizationExistenceQuery = _dbContext.Organizations
+    await _organizationAuthorizationService.RequireTeacherOrHigherAsync(
+      request.OrganizationId,
+      request.UserId,
+      "You are not allowed to access this organization.",
+      cancellationToken);
+
+    IQueryable<OrganizationDto> organizationQuery = _dbContext.Organizations
       .Where(organization => organization.Id == request.OrganizationId)
-      .Select(organization => organization.Id);
-
-    var organizationId = await _dbContext.FirstOrDefaultAsync(organizationExistenceQuery, cancellationToken);
-    if (organizationId == Guid.Empty)
-    {
-      throw new NotFoundException($"Organization with id '{request.OrganizationId}' was not found.");
-    }
-
-    IQueryable<OrganizationDto> organizationQuery =
-      from organization in _dbContext.Organizations
-      join membership in _dbContext.OrganizationMembers
-        on organization.Id equals membership.OrganizationId
-      where organization.Id == request.OrganizationId && membership.UserId == request.UserId
-      select new OrganizationDto
+      .Select(organization => new OrganizationDto
       {
         Id = organization.Id,
         Name = organization.Name,
         Slug = organization.Slug,
         Plan = organization.Plan,
         CreatedAt = organization.CreatedAt
-      };
+      });
 
     var organizationDto = await _dbContext.FirstOrDefaultAsync(organizationQuery, cancellationToken);
     if (organizationDto is null)
     {
-      throw new ForbiddenException("You are not allowed to access this organization.");
+      throw new NotFoundException($"Organization with id '{request.OrganizationId}' was not found.");
     }
 
     return organizationDto;

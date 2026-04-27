@@ -1,7 +1,7 @@
 import { AxiosError } from "axios";
 import { authService } from "@/src/features/auth/services/authService";
+import { forceClientSignOut } from "@/src/lib/forceClientSignOut";
 import { usersApiClient } from "@/src/features/users/services/usersApiClient";
-import { resetClientSessionState } from "@/src/lib/resetClientSessionState";
 import { getApiErrorCode, getApiErrorMessage as getParsedApiErrorMessage } from "@/src/shared/utils/apiError";
 import { useAuthStore } from "@/src/store/authStore";
 
@@ -87,8 +87,7 @@ export function useEmailVerification() {
     debugAuthVerification("supabase.getSession failed", { message: error.message });
 
     if (isInvalidRefreshTokenError(error.message)) {
-      await authService.signOut();
-      resetClientSessionState();
+      await forceClientSignOut();
       throw new Error("Your session expired. Please sign in again.");
     }
 
