@@ -27,6 +27,9 @@ export function usePayments(periodId: string | null): UseQueryResult<FeePaymentD
   return useQuery<FeePaymentDto[]>({
     queryKey: paymentsQueryKey(selectedOrgId, studentId, periodId),
     enabled: Boolean(selectedOrgId && studentId && periodId),
-    queryFn: () => billingApiClient.getPaymentsForPeriod(periodId!, selectedOrgId!, studentId!),
+    queryFn: () => billingApiClient.getPaymentsForPeriod(periodId!, {
+      orgId: selectedOrgId!,
+      studentId: studentId!,
+    }),
   });
 }

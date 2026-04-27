@@ -18,9 +18,10 @@ async function getFeePeriods(orgId: string, studentId: string): Promise<FeePerio
 
 async function getPaymentsForPeriod(
   periodId: string,
-  orgId: string,
-  studentId: string,
+  params: { orgId: string; studentId: string },
 ): Promise<FeePaymentDto[]> {
+  const { orgId, studentId } = params;
+
   const { data } = await apiClient.get<FeePaymentDto[]>(
     `/api/organizations/${orgId}/students/${studentId}/periods/${periodId}/payments`,
   );

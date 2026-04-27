@@ -32,6 +32,11 @@ function resolveParam(input: string | string[] | undefined): string | null {
 }
 
 function formatDate(value: string): string {
+  const dateOnlyPattern = /^(\d{4})-(\d{2})-(\d{2})$/;
+  if (dateOnlyPattern.test(value)) {
+    return value;
+  }
+
   const parsedDate = new Date(value);
   if (Number.isNaN(parsedDate.getTime())) {
     return value;
@@ -74,6 +79,17 @@ export default function StudentPaymentsScreen() {
     }
 
     setSelectedPeriodId(feePeriodsQuery.data[0].id);
+  }, [feePeriodsQuery.data, selectedPeriodId]);
+
+  useEffect(() => {
+    if (!selectedPeriodId || !feePeriodsQuery.data || feePeriodsQuery.data.length === 0) {
+      return;
+    }
+
+    const selectedPeriodStillExists = feePeriodsQuery.data.some((period) => period.id === selectedPeriodId);
+    if (!selectedPeriodStillExists) {
+      setSelectedPeriodId(feePeriodsQuery.data[0].id);
+    }
   }, [feePeriodsQuery.data, selectedPeriodId]);
 
   const selectedPeriod = useMemo<FeePeriodDto | null>(() => {
