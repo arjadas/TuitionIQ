@@ -9,6 +9,7 @@ public interface IAppDbContext
   IQueryable<OrganizationMember> OrganizationMembers { get; }
   IQueryable<Student> Students { get; }
   IQueryable<TeacherStudent> TeacherStudents { get; }
+  IQueryable<StudentFee> StudentFees { get; }
   IQueryable<Student> ApplyStudentNameSearch(IQueryable<Student> query, string pattern);
   void Add<TEntity>(TEntity entity) where TEntity : class;
   void AddAuditLog(AuditLog auditLog);
