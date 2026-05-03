@@ -960,7 +960,6 @@ EXPO_PUBLIC_API_BASE_URL=https://api.tuitioniq.com
 **Must never appear in `frontend/.env`:**
 
 ```bash
-SUPABASE_JWT_SECRET=       ← backend only; if bundled into app binary, rotate immediately
 SUPABASE_SERVICE_ROLE_KEY= ← backend only; bypasses RLS entirely
 ```
 
