@@ -91,5 +91,69 @@ declare module "@tuitioniq/types" {
     totalCount: number;
   };
 
+  export type StudentFeeConfigDto = {
+    id: string;
+    organizationId: string;
+    studentId: string;
+    setBy: string;
+    feeSource: string;
+    manualFee?: number | null;
+    overrideReason?: string | null;
+    currency: string;
+    effectiveFrom: string;
+    effectiveTo?: string | null;
+    isActive: boolean;
+    notes?: string | null;
+    createdAt: string;
+    updatedAt: string;
+    deletedAt?: string | null;
+  };
+
+  export type SetFeeRequest = {
+    feeSource: string;
+    manualFee?: number | null;
+    currency: string;
+    effectiveFrom: string;
+    notes?: string | null;
+    overrideReason?: string | null;
+  };
+
+  export type FeePeriodDto = {
+    id: string;
+    periodYear: number;
+    periodMonth: number;
+    fee: number;
+    amountPaid: number;
+    currency: string;
+    status: string;
+    dueDate?: string | null;
+    createdAt: string;
+  };
+
+  export type FeePaymentDto = {
+    id: string;
+    amount: number;
+    currency: string;
+    paymentDate: string;
+    paymentMethod: string;
+    reference?: string | null;
+    createdAt: string;
+  };
+
+  export type RecordPaymentRequest = {
+    studentId: string;
+    feePeriodId: string;
+    amount: number;
+    currency: string;
+    paymentDate: string;
+    paymentMethod: string;
+    reference?: string | null;
+    notes?: string | null;
+  };
+
+  export type WaivePeriodRequest = {
+    waiverReason?: string | null;
+  };
+
   export type OrganizationMembershipDto = MembershipDto;
 }

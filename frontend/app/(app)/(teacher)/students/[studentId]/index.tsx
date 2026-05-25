@@ -191,6 +191,15 @@ export default function StudentDetailScreen() {
           <View style={styles.actionsRow}>
             <Pressable
               onPress={() => {
+                router.push(`/(app)/(teacher)/students/${studentId}/periods` as Href);
+              }}
+              style={styles.secondaryButton}
+            >
+              <Text style={styles.secondaryButtonText}>Fee periods</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => {
                 setIsEditing((current) => !current);
               }}
               style={styles.secondaryButton}
