@@ -6,26 +6,15 @@ import { FeePeriodList } from "@/src/features/billing/components/FeePeriodList";
 import { SetFeeForm } from "@/src/features/billing/components/SetFeeForm";
 import { useFeePeriods, useSetFee } from "@/src/features/billing/hooks/useFeePeriods";
 import { getApiErrorMessage } from "@/src/shared/utils/apiError";
+import { resolveRouteParam } from "@/src/shared/utils/resolveRouteParam";
 import { useOrgStore } from "@/src/store/orgStore";
-
-function resolveParam(input: string | string[] | undefined): string | null {
-  if (!input) {
-    return null;
-  }
-
-  if (Array.isArray(input)) {
-    return input[0] ?? null;
-  }
-
-  return input;
-}
 
 export default function StudentFeePeriodsScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ studentId?: string | string[] }>();
   const selectedOrgId = useOrgStore((state) => state.selectedOrgId);
 
-  const studentId = useMemo(() => resolveParam(params.studentId), [params.studentId]);
+  const studentId = useMemo(() => resolveRouteParam(params.studentId), [params.studentId]);
   const feePeriodsQuery = useFeePeriods(studentId);
   const setFeeMutation = useSetFee(studentId);
 

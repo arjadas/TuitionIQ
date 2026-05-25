@@ -17,19 +17,8 @@ import { useFeePeriods, useRecordPayment, useReversePayment } from "@/src/featur
 import { usePayments } from "@/src/features/billing/hooks/usePayments";
 import { getApiErrorMessage } from "@/src/shared/utils/apiError";
 import { formatCurrency } from "@/src/shared/utils/formatCurrency";
+import { resolveRouteParam } from "@/src/shared/utils/resolveRouteParam";
 import { useOrgStore } from "@/src/store/orgStore";
-
-function resolveParam(input: string | string[] | undefined): string | null {
-  if (!input) {
-    return null;
-  }
-
-  if (Array.isArray(input)) {
-    return input[0] ?? null;
-  }
-
-  return input;
-}
 
 function formatDate(value: string): string {
   const dateOnlyPattern = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -59,8 +48,8 @@ export default function StudentPaymentsScreen() {
   const params = useLocalSearchParams<{ studentId?: string | string[]; periodId?: string | string[] }>();
   const selectedOrgId = useOrgStore((state) => state.selectedOrgId);
 
-  const studentId = useMemo(() => resolveParam(params.studentId), [params.studentId]);
-  const periodIdFromRoute = useMemo(() => resolveParam(params.periodId), [params.periodId]);
+  const studentId = useMemo(() => resolveRouteParam(params.studentId), [params.studentId]);
+  const periodIdFromRoute = useMemo(() => resolveRouteParam(params.periodId), [params.periodId]);
 
   const feePeriodsQuery = useFeePeriods(studentId);
 
