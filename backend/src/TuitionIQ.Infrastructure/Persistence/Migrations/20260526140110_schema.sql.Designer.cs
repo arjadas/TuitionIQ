@@ -14,8 +14,8 @@ using TuitionIQ.Infrastructure.Persistence;
 namespace TuitionIQ.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260328113205_InitialSchema")]
-    partial class InitialSchema
+    [Migration("20260526140110_schema.sql")]
+    partial class schemasql
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -23,7 +23,7 @@ namespace TuitionIQ.Infrastructure.Persistence.Migrations
 #pragma warning disable 612, 618
             modelBuilder
                 .HasDefaultSchema("public")
-                .HasAnnotation("ProductVersion", "8.0.4")
+                .HasAnnotation("ProductVersion", "10.0.5")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -278,7 +278,7 @@ namespace TuitionIQ.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("DueDate")
                         .HasDatabaseName("idx_fee_periods_due_date")
-                        .HasFilter("\"status\" IN ('unpaid', 'partial', 'overdue') AND \"deleted_at\" IS NULL");
+                        .HasFilter("\"status\" IN ('Unpaid', 'Partial', 'Overdue') AND \"deleted_at\" IS NULL");
 
                     b.HasIndex("StudentFeeId");
 
@@ -294,7 +294,7 @@ namespace TuitionIQ.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("StudentId", "PeriodYear", "PeriodMonth")
                         .IsUnique()
-                        .HasDatabaseName("idx_fee_periods_student_id")
+                        .HasDatabaseName("idx_fee_periods_student_month_active")
                         .HasFilter("\"deleted_at\" IS NULL");
 
                     b.ToTable("fee_periods", "public");
@@ -722,6 +722,12 @@ namespace TuitionIQ.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(255)")
                         .HasColumnName("email");
 
+                    b.Property<bool>("EmailVerified")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("email_verified");
+
                     b.Property<string>("FirstName")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -763,6 +769,10 @@ namespace TuitionIQ.Infrastructure.Persistence.Migrations
                     b.HasIndex("Email")
                         .IsUnique()
                         .HasDatabaseName("idx_users_email")
+                        .HasFilter("\"deleted_at\" IS NULL");
+
+                    b.HasIndex("EmailVerified")
+                        .HasDatabaseName("idx_users_email_verified")
                         .HasFilter("\"deleted_at\" IS NULL");
 
                     b.ToTable("users", "public");

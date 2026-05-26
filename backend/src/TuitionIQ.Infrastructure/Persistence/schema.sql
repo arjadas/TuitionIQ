@@ -365,6 +365,10 @@ BEGIN
     ON CONFLICT (auth_user_id) DO NOTHING;
 
     RETURN NEW;
+EXCEPTION WHEN OTHERS THEN
+    -- Never block auth.users creation. UserActiveCheckMiddleware provisions any missed row.
+    RAISE WARNING 'handle_new_user failed for auth_user_id=%: %', NEW.id, SQLERRM;
+    RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 
