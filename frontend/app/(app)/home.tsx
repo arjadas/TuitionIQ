@@ -1,11 +1,27 @@
-import { ProfileCompletionModal } from "@/src/features/users/components/ProfileCompletionModal";
+import { Ionicons } from "@expo/vector-icons";
+import {
+  ActivityIndicator,
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { HomeWelcome } from "@/src/features/organizations/components/HomeWelcome";
+import { OrgSelectorCard } from "@/src/features/organizations/components/OrgSelectorCard";
 import { useHomeScreenState } from "@/src/features/organizations/hooks/useHomeScreenState";
-import { ActivityIndicator, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ProfileCompletionModal } from "@/src/features/users/components/ProfileCompletionModal";
+import { Avatar } from "@/src/shared/components/ui/Avatar";
+import { Card } from "@/src/shared/components/ui/Card";
+import { forceClientSignOut } from "@/src/lib/forceClientSignOut";
+import { colors, spacing } from "@/src/shared/theme/tokens";
 
 export default function HomeScreen() {
   const {
     currentUser,
     memberships,
+    selectedOrgId,
     isLoading,
     shouldShowProfileCompletion,
     shouldShowWelcome,
@@ -16,16 +32,28 @@ export default function HomeScreen() {
     onCreateOrganization,
   } = useHomeScreenState();
 
+  const fullName = [currentUser?.firstName, currentUser?.lastName].filter(Boolean).join(" ").trim();
+  const greetingName = currentUser?.firstName?.trim() || "there";
+
+  const handleSignOut = (): void => {
+    void forceClientSignOut({ redirectTo: "/(auth)/login" });
+  };
+
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.contentContainer}>
-        <Text style={styles.kicker}>TuitionIQ</Text>
-        <Text style={styles.heading}>Home</Text>
+      <ScrollView contentContainerStyle={styles.content}>
+        <View style={styles.header}>
+          <View style={styles.headerText}>
+            <Text style={styles.kicker}>TUITIONIQ</Text>
+            <Text style={styles.greeting}>Hi, {greetingName}</Text>
+          </View>
+          <Avatar name={fullName || currentUser?.email} size={44} />
+        </View>
 
         {isLoading ? (
           <View style={styles.centerBlock}>
-            <ActivityIndicator size="large" color="#1d4ed8" />
-            <Text style={styles.bodyText}>Loading your workspace...</Text>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={styles.mutedText}>Loading your workspace...</Text>
           </View>
         ) : null}
 
@@ -36,42 +64,30 @@ export default function HomeScreen() {
           </View>
         ) : null}
 
-        {shouldShowWelcome ? (
-          <View style={styles.welcomeCard}>
-            <Text style={styles.welcomeTitle}>Welcome to TuitionIQ</Text>
-            <Text style={styles.welcomeBody}>
-              Create your organisation to start managing students and fee periods.
-            </Text>
-            <Pressable onPress={onCreateOrganization} style={styles.primaryButton}>
-              <Text style={styles.primaryButtonText}>Create your organisation</Text>
-            </Pressable>
-          </View>
-        ) : null}
+        {shouldShowWelcome ? <HomeWelcome onCreateOrganization={onCreateOrganization} /> : null}
 
         {shouldShowOrgSelector ? (
-          <View style={styles.selectorCard}>
-            <Text style={styles.selectorTitle}>Select organisation</Text>
-            <Text style={styles.selectorBody}>
-              Choose where you want to continue as {currentUser?.email ?? "teacher"}.
-            </Text>
-            <View style={styles.membershipList}>
+          <Card>
+            <Text style={styles.sectionTitle}>Choose your organisation</Text>
+            <Text style={styles.sectionBody}>Select where you want to work.</Text>
+            <View style={styles.list}>
               {memberships.map((membership) => (
-                <Pressable
+                <OrgSelectorCard
                   key={`${membership.organizationId}:${membership.role}`}
+                  membership={membership}
+                  selected={membership.organizationId === selectedOrgId}
                   onPress={() => onSelectOrg(membership)}
-                  style={styles.membershipItem}
-                >
-                  <View style={styles.membershipTextWrap}>
-                    <Text style={styles.membershipName}>{membership.organization.name}</Text>
-                    <Text style={styles.membershipMeta}>
-                      {membership.role} · {membership.organization.plan}
-                    </Text>
-                  </View>
-                  <Text style={styles.membershipArrow}>→</Text>
-                </Pressable>
+                />
               ))}
             </View>
-          </View>
+          </Card>
+        ) : null}
+
+        {!isLoading ? (
+          <Pressable accessibilityRole="button" onPress={handleSignOut} style={styles.signOut}>
+            <Ionicons name="log-out-outline" size={16} color={colors.textMuted} />
+            <Text style={styles.signOutText}>Sign out</Text>
+          </Pressable>
         ) : null}
       </ScrollView>
 
@@ -89,132 +105,85 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f1f5f9",
+    backgroundColor: colors.background,
   },
-  contentContainer: {
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-    gap: 16,
+  content: {
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.xl,
+    gap: spacing.lg,
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  headerText: {
+    gap: 2,
   },
   kicker: {
     fontSize: 12,
     fontWeight: "700",
     letterSpacing: 1.1,
-    color: "#0d9488",
-    textTransform: "uppercase",
+    color: colors.action,
   },
-  heading: {
-    fontSize: 30,
+  greeting: {
+    fontSize: 26,
     fontWeight: "700",
-    color: "#0f172a",
+    color: colors.textPrimary,
   },
   centerBlock: {
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.surface,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    padding: 24,
+    borderColor: colors.border,
+    padding: spacing.xxl,
     alignItems: "center",
-    gap: 12,
+    gap: spacing.md,
   },
-  bodyText: {
+  mutedText: {
     fontSize: 14,
-    color: "#475569",
+    color: colors.textSecondary,
   },
   warningCard: {
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#fecaca",
-    backgroundColor: "#fff1f2",
-    padding: 14,
+    borderColor: "#FECACA",
+    backgroundColor: "#FFF1F2",
+    padding: spacing.md,
     gap: 6,
   },
   warningTitle: {
     fontSize: 15,
     fontWeight: "700",
-    color: "#9f1239",
+    color: "#9F1239",
   },
   warningBody: {
     fontSize: 13,
-    color: "#be123c",
+    color: "#BE123C",
   },
-  welcomeCard: {
-    backgroundColor: "#ffffff",
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    padding: 16,
-    gap: 10,
-  },
-  welcomeTitle: {
-    fontSize: 22,
+  sectionTitle: {
+    fontSize: 18,
     fontWeight: "700",
-    color: "#0f172a",
+    color: colors.textPrimary,
   },
-  welcomeBody: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: "#475569",
-  },
-  primaryButton: {
-    marginTop: 4,
-    backgroundColor: "#1d4ed8",
-    minHeight: 46,
-    borderRadius: 12,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  primaryButtonText: {
-    color: "#ffffff",
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  selectorCard: {
-    backgroundColor: "#ffffff",
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    padding: 16,
-    gap: 10,
-  },
-  selectorTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#0f172a",
-  },
-  selectorBody: {
+  sectionBody: {
     fontSize: 13,
     lineHeight: 18,
-    color: "#64748b",
+    color: colors.textMuted,
   },
-  membershipList: {
-    gap: 8,
+  list: {
+    gap: spacing.sm,
   },
-  membershipItem: {
-    backgroundColor: "#f8fafc",
-    borderColor: "#dbe5ef",
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+  signOut: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: spacing.md,
   },
-  membershipTextWrap: {
-    gap: 3,
-  },
-  membershipName: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#0f172a",
-  },
-  membershipMeta: {
-    fontSize: 12,
-    color: "#64748b",
-  },
-  membershipArrow: {
-    fontSize: 18,
-    color: "#1d4ed8",
+  signOutText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.textMuted,
   },
 });

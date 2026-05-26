@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   Pressable,
   SafeAreaView,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -17,6 +18,11 @@ import {
   useOrgMemberships,
 } from "@/src/features/organizations/hooks/useOrgMemberships";
 import { organizationsApiClient } from "@/src/features/organizations/services/organizationsApiClient";
+import { Avatar } from "@/src/shared/components/ui/Avatar";
+import { Button } from "@/src/shared/components/ui/Button";
+import { Card } from "@/src/shared/components/ui/Card";
+import { RoleBadge } from "@/src/shared/components/ui/RoleBadge";
+import { colors, spacing } from "@/src/shared/theme/tokens";
 import { useOrgStore } from "@/src/store/orgStore";
 
 const organizationDetailsQueryKey = (organizationId: string | null) =>
@@ -58,7 +64,6 @@ export default function DashboardScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const selectedOrgId = useOrgStore((state) => state.selectedOrgId);
-  const selectOrg = useOrgStore((state) => state.selectOrg);
   const setMemberships = useOrgStore((state) => state.setMemberships);
 
   const membershipsQuery = useOrgMemberships();
@@ -67,20 +72,13 @@ export default function DashboardScreen() {
   const [name, setName] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
 
+  // Never auto-select. If no org has been chosen (e.g. native restart cleared the
+  // in-memory selection), send the user back to the selector to pick one.
   useEffect(() => {
-    if (!membershipsQuery.isSuccess || selectedOrgId) {
-      return;
-    }
-
-    if (memberships.length === 1) {
-      selectOrg(memberships[0].organizationId);
-      return;
-    }
-
-    if (memberships.length > 1) {
+    if (membershipsQuery.isSuccess && !selectedOrgId) {
       router.replace("/home" as Href);
     }
-  }, [memberships, membershipsQuery.isSuccess, router, selectOrg, selectedOrgId]);
+  }, [membershipsQuery.isSuccess, router, selectedOrgId]);
 
   const selectedMembership = useMemo(() => {
     if (!selectedOrgId) {
@@ -159,101 +157,84 @@ export default function DashboardScreen() {
     await updateMutation.mutateAsync({ name: trimmedName });
   };
 
+  const goToSelector = (): void => {
+    router.replace("/home" as Href);
+  };
+
   const isLoading = membershipsQuery.isPending || (Boolean(selectedOrgId) && organizationQuery.isPending);
 
   if (isLoading) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.card}>
-          <ActivityIndicator color="#1d4ed8" size="large" />
-          <Text style={styles.subtitle}>Loading organization details...</Text>
-        </View>
+      <SafeAreaView style={styles.centered}>
+        <ActivityIndicator color={colors.primary} size="large" />
+        <Text style={styles.mutedText}>Loading organization...</Text>
       </SafeAreaView>
     );
   }
 
   if (membershipsQuery.isError) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.card}>
+      <SafeAreaView style={styles.centered}>
+        <Card style={styles.fullWidthCard}>
           <Text style={styles.title}>Dashboard</Text>
           <Text style={styles.errorText}>
             {getErrorMessage(membershipsQuery.error, "Could not load memberships.")}
           </Text>
-        </View>
+        </Card>
       </SafeAreaView>
     );
   }
 
-  if (membershipsQuery.isSuccess && memberships.length === 0) {
+  if (!selectedOrgId || !organizationQuery.data || organizationQuery.isError) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.card}>
+      <SafeAreaView style={styles.centered}>
+        <Card style={styles.fullWidthCard}>
           <Text style={styles.title}>Dashboard</Text>
-          <Text style={styles.subtitle}>You do not have an organization yet.</Text>
-          <Pressable
-            onPress={() => {
-              router.push("/organizations/create" as Href);
-            }}
-            style={styles.primaryButton}
-          >
-            <Text style={styles.primaryButtonText}>Create organization</Text>
-          </Pressable>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  if (!selectedOrgId) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.card}>
-          <Text style={styles.title}>Dashboard</Text>
-          <Text style={styles.subtitle}>Select an organization to continue.</Text>
-          <Pressable
-            onPress={() => {
-              router.replace("/home" as Href);
-            }}
-            style={styles.primaryButton}
-          >
-            <Text style={styles.primaryButtonText}>Go to home</Text>
-          </Pressable>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  if (organizationQuery.isError || !organizationQuery.data) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.card}>
-          <Text style={styles.title}>Dashboard</Text>
-          <Text style={styles.errorText}>
-            {getErrorMessage(organizationQuery.error, "Could not load organization details.")}
+          <Text style={styles.mutedText}>
+            {organizationQuery.isError
+              ? getErrorMessage(organizationQuery.error, "Could not load organization details.")
+              : "Choose an organisation to continue."}
           </Text>
-        </View>
+          <Button label="Go to organisations" onPress={goToSelector} />
+        </Card>
       </SafeAreaView>
     );
   }
+
+  const organization = organizationQuery.data;
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.card}>
-        <Text style={styles.title}>Dashboard</Text>
-        <Text style={styles.subtitle}>Selected organization: {organizationQuery.data.name}</Text>
-
-        <View style={styles.metaList}>
-          <Text style={styles.metaItem}>Slug: {organizationQuery.data.slug}</Text>
-          <Text style={styles.metaItem}>Plan: {organizationQuery.data.plan}</Text>
-          <Text style={styles.metaItem}>Joined as: {selectedMembership?.role ?? "Member"}</Text>
-          <Text style={styles.metaItem}>Created: {formatDate(organizationQuery.data.createdAt)}</Text>
+      <ScrollView contentContainerStyle={styles.content}>
+        <View style={styles.header}>
+          <View style={styles.headerText}>
+            <Text style={styles.kicker}>DASHBOARD</Text>
+            <Text style={styles.orgName} numberOfLines={1}>{organization.name}</Text>
+            {selectedMembership ? <RoleBadge role={selectedMembership.role} /> : null}
+          </View>
+          <Avatar name={organization.name} size={48} />
         </View>
 
-        <View style={styles.formBlock}>
-          <Text style={styles.label}>Organization name</Text>
+        <Card>
+          <View style={styles.metaRow}>
+            <Text style={styles.metaLabel}>Plan</Text>
+            <Text style={styles.metaValue}>{organization.plan}</Text>
+          </View>
+          <View style={styles.metaRow}>
+            <Text style={styles.metaLabel}>Slug</Text>
+            <Text style={styles.metaValue}>{organization.slug}</Text>
+          </View>
+          <View style={styles.metaRow}>
+            <Text style={styles.metaLabel}>Created</Text>
+            <Text style={styles.metaValue}>{formatDate(organization.createdAt)}</Text>
+          </View>
+        </Card>
+
+        <Card>
+          <Text style={styles.sectionTitle}>Organisation name</Text>
           <TextInput
             onChangeText={setName}
-            placeholder="Organization name"
+            placeholder="Organisation name"
             style={styles.input}
             value={name}
           />
@@ -265,21 +246,20 @@ export default function DashboardScreen() {
             </Text>
           ) : null}
 
-          <Pressable
-            disabled={!canSubmit}
+          <Button
+            label="Save changes"
             onPress={() => {
               void submit();
             }}
-            style={[styles.primaryButton, !canSubmit && styles.disabledButton]}
-          >
-            {updateMutation.isPending ? (
-              <ActivityIndicator color="#ffffff" />
-            ) : (
-              <Text style={styles.primaryButtonText}>Update organization</Text>
-            )}
-          </Pressable>
-        </View>
-      </View>
+            loading={updateMutation.isPending}
+            disabled={!canSubmit}
+          />
+        </Card>
+
+        <Pressable accessibilityRole="button" onPress={goToSelector} style={styles.switchOrg}>
+          <Text style={styles.switchOrgText}>Switch organisation</Text>
+        </Pressable>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -287,70 +267,95 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f1f5f9",
+    backgroundColor: colors.background,
+  },
+  centered: {
+    flex: 1,
+    backgroundColor: colors.background,
+    alignItems: "center",
     justifyContent: "center",
-    padding: 20,
+    gap: spacing.md,
+    padding: spacing.xl,
   },
-  card: {
-    backgroundColor: "#ffffff",
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    padding: 18,
-    gap: 12,
+  content: {
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.xl,
+    gap: spacing.lg,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#0f172a",
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.md,
   },
-  subtitle: {
-    fontSize: 14,
-    color: "#64748b",
-  },
-  metaList: {
+  headerText: {
+    flex: 1,
     gap: 4,
   },
-  metaItem: {
-    fontSize: 13,
-    color: "#334155",
+  kicker: {
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 1.1,
+    color: colors.action,
   },
-  formBlock: {
-    gap: 8,
+  orgName: {
+    fontSize: 26,
+    fontWeight: "700",
+    color: colors.textPrimary,
   },
-  label: {
+  fullWidthCard: {
+    alignSelf: "stretch",
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: colors.textPrimary,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: colors.textPrimary,
+  },
+  metaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  metaLabel: {
     fontSize: 13,
+    color: colors.textMuted,
+  },
+  metaValue: {
+    fontSize: 14,
     fontWeight: "600",
-    color: "#334155",
+    color: colors.textPrimary,
   },
   input: {
     borderWidth: 1,
-    borderColor: "#cbd5e1",
+    borderColor: "#CBD5E1",
     borderRadius: 12,
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.surface,
     paddingHorizontal: 12,
     paddingVertical: 11,
     fontSize: 16,
-    color: "#0f172a",
+    color: colors.textPrimary,
   },
-  primaryButton: {
-    borderRadius: 12,
-    minHeight: 46,
-    backgroundColor: "#1d4ed8",
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 4,
-  },
-  primaryButtonText: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#ffffff",
-  },
-  disabledButton: {
-    opacity: 0.5,
+  mutedText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: "center",
   },
   errorText: {
     fontSize: 13,
-    color: "#b91c1c",
+    color: "#B91C1C",
+  },
+  switchOrg: {
+    alignItems: "center",
+    paddingVertical: spacing.md,
+  },
+  switchOrgText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.primary,
   },
 });
