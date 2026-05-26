@@ -112,9 +112,12 @@ apiClient.interceptors.response.use(
     const statusCode = error.response?.status;
     const code = getApiErrorCode(error);
 
-    if (statusCode === 401) {
-      await forceClientSignOut({ redirectTo: "/(auth)/login" });
-    }
+    // A 401 is intentionally NOT a forced sign-out. The Supabase SDK auto-refreshes
+    // tokens and replays queued requests (authentication.md §9.1), and genuine
+    // session loss is emitted via supabase.auth.onAuthStateChange("SIGNED_OUT")
+    // and handled by the route guards. Forcing sign-out here turned a single
+    // failed/rejected request (e.g. the post-login /api/users/me probe) into a
+    // bounce back to the login screen.
 
     if (statusCode === 403 && code === "ACCOUNT_SUSPENDED") {
       await forceClientSignOut({ redirectTo: "/(auth)/login" });
