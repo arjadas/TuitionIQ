@@ -92,7 +92,14 @@ if (app.Environment.IsDevelopment())
   app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();  // Redirect HTTP requests to HTTPS for secure communication
+// HTTPS redirection is only meaningful when an HTTPS endpoint is configured.
+// The local API listens on HTTP only (see appsettings "urls"), so enabling it in
+// Development just logs "Failed to determine the https port for redirect" on every
+// request. Apply it outside Development, where TLS is terminated properly.
+if (!app.Environment.IsDevelopment())
+{
+  app.UseHttpsRedirection();
+}
 
 app.UseRouting();  // Matches the incoming request to an endpoint (but doesn’t execute it yet)
 

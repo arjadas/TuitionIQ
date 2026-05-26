@@ -53,7 +53,14 @@ public sealed class TestWebApplicationFactory : WebApplicationFactory<Program>
     return base.CreateHost(builder);
   }
 
-  public async Task SeedUserAsync(Guid userId, bool emailVerified, bool isActive)
+  // Degenerate case used by most tests: the internal users.id happens to equal the auth uid.
+  public Task SeedUserAsync(Guid userId, bool emailVerified, bool isActive)
+    => SeedUserAsync(userId, userId, emailVerified, isActive);
+
+  // Production case: the internal users.id is independent of the Supabase auth uid (sub),
+  // which is stored on auth_user_id. Used to prove identity resolution goes through
+  // auth_user_id rather than assuming users.id == sub.
+  public async Task SeedUserAsync(Guid internalUserId, Guid authUserId, bool emailVerified, bool isActive)
   {
     using var scope = Services.CreateScope();
     var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -62,9 +69,9 @@ public sealed class TestWebApplicationFactory : WebApplicationFactory<Program>
 
     dbContext.Users.Add(new User
     {
-      Id = userId,
-      AuthUserId = userId.ToString(),
-      Email = $"{userId:N}@example.com",
+      Id = internalUserId,
+      AuthUserId = authUserId.ToString(),
+      Email = $"{internalUserId:N}@example.com",
       FirstName = "Integration",
       LastName = "User",
       Phone = null,

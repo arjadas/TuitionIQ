@@ -9,7 +9,7 @@ public class AppDbContextFactory : IDesignTimeDbContextFactory<AppDbContext>
   {
     var optionsBuilder = new DbContextOptionsBuilder<AppDbContext>();
     var connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection")
-      ?? "Host=localhost;Port=5432;Database=tuitioniq;Username=postgres;Password=postgres";
+      ?? "postgresql://postgres.dgkuruokjwaedygwziee:devsareworking%40night@aws-1-ap-southeast-2.pooler.supabase.com:5432/postgres";
 
     optionsBuilder.UseNpgsql(connectionString);
 

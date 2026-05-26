@@ -19,6 +19,26 @@
 
 ---
 
+## Current Build Scope
+
+> **Implementation note (added during the auth-flow + Home Screen work).** The shipping
+> app is **teacher-only**. The following are specified later in this document for future
+> phases but are **not implemented** in the current build — do not rely on them:
+>
+> - Student portal / student login and the `student → /student-portal` route
+> - Invite-based registration (Section 6) and the "I have a pending invite" CTA
+> - `students.user_id` linking, LMS, subscriptions / billing plans
+>
+> Two behaviours also differ from the original spec and are reflected inline below:
+>
+> - **Org resolution always shows the selector** for one or more memberships and **never
+>   auto-selects**, even for a single org (Section 11).
+> - **Auth bootstrap is an explicit state machine** — `authStatus ∈ { initializing,
+>   unauthenticated, unverified, authenticated }`. Route guards render a loading screen
+>   while `initializing` and never act on half-resolved state (Section 9).
+
+---
+
 ## 1. System Architecture
 
 ```
@@ -51,7 +71,7 @@ SUPABASE PLATFORM
 Supabase issues JWTs signed with an **ECC P-256 private key**. The backend validates using the corresponding **public keys fetched from the JWKS endpoint**.
 
 - **Algorithm:** ES256
-- **JWKS endpoint:** `https://<project-ref>.supabase.co/auth/v1/keys`
+- **JWKS endpoint:** `https://<project-ref>.supabase.co/auth/v1/.well-known/jwks.json` (the real `jwks_uri`, resolved automatically from the OIDC discovery document — see 2.2; `/auth/v1/keys` is not the JWKS URL)
 - **Key selection:** Use the `kid` header in the JWT to select the correct key from the JWKS response
 - **Key rotation:** Cache JWKS with a TTL (recommended: 1 hour); refresh on unknown `kid`
 
@@ -66,6 +86,11 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         options.Authority = $"https://{builder.Configuration["Supabase:ProjectRef"]}.supabase.co/auth/v1";
         options.MetadataAddress = $"https://{builder.Configuration["Supabase:ProjectRef"]}.supabase.co/auth/v1/.well-known/openid-configuration";
 
+        // REQUIRED: Supabase emits standard OIDC claim names ("sub", "email", ...). The default
+        // handler rewrites them to legacy XML URIs (sub -> ClaimTypes.NameIdentifier), so
+        // FindFirst("sub") returns null and identity resolution fails closed with ACCOUNT_SUSPENDED.
+        options.MapInboundClaims = false;
+
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuerSigningKey = true,
@@ -76,6 +101,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidIssuer              = $"https://{builder.Configuration["Supabase:ProjectRef"]}.supabase.co/auth/v1",
             ValidateLifetime         = true,
             ClockSkew                = TimeSpan.FromSeconds(30),
+            NameClaimType            = "sub",
+            RoleClaimType            = "role",
         };
 
         options.RequireHttpsMetadata = true; // Always true in production
@@ -99,8 +126,16 @@ Every incoming request to a protected endpoint must pass all of these:
 
 ### 2.4 Identity Extraction
 
+The JWT `sub` is the **Supabase auth uid** (`auth.users.id`), **not** the internal
+`public.users.id`. Resolve the internal identity via the canonical `auth_user_id` link
+(done once in `UserActiveCheckMiddleware`, then exposed by `ICurrentUserService`):
+
 ```csharp
-var userId = User.FindFirst("sub")?.Value; // Supabase user UUID
+var authUid = User.FindFirst("sub")?.Value; // Supabase auth uid (auth.users.id)
+// Internal identity used by all commands/queries/FKs:
+//   SELECT id FROM public.users WHERE auth_user_id = authUid
+// ICurrentUserService.UserId      -> internal public.users.id (resolved)
+// ICurrentUserService.AuthUserId  -> the auth uid above
 ```
 
 ### 2.5 Environment Variables (C# server only — never in Expo)
@@ -121,7 +156,28 @@ Supabase__ServiceRoleKey=<service-role-key>   # Bypasses RLS. Never expose to cl
 | `auth.users`   | Supabase (internal) | Credential store. Never write to directly.              |
 | `public.users` | TuitionIQ           | Canonical identity. All business logic references this. |
 
-`public.users.id` = `auth.users.id` (same UUID). `auth.uid()` in RLS resolves directly to `public.users.id` without a join.
+**Identity model.** `public.users.id` is an **independent internal UUID** (`gen_random_uuid()`),
+**not** the Supabase auth uid. The auth uid (`auth.users.id`, the JWT `sub`) is stored in
+`public.users.auth_user_id` (UNIQUE), which is the canonical link between the two tables:
+
+```
+public.users.id           = internal TuitionIQ identity (canonical; all FKs reference this)
+public.users.auth_user_id = Supabase auth.users.id  (UNIQUE)
+JWT sub                    = auth.users.id           = public.users.auth_user_id
+```
+
+All identity resolution goes through `auth_user_id`. The backend reads the JWT `sub`, resolves
+it to the internal `users.id` once (in `UserActiveCheckMiddleware`), and passes that internal
+id to every command/query. Because `id != auth.uid()`, RLS resolves the internal id via the
+`public.current_user_id()` helper (see §10.1) rather than comparing `auth.uid()` to `id`.
+
+> **History.** Earlier revisions assumed `id == sub` and resolved users by `users.id == sub`.
+> That broke as soon as a row existed with an independent `id` (the real signup trigger uses
+> `gen_random_uuid()`): every lookup missed and `UserActiveCheckMiddleware` returned
+> `403 ACCOUNT_SUSPENDED`, which the client treats as a forced sign-out. The mapping bug
+> (`MapInboundClaims` left at its default, so `FindFirst("sub")` returned null) produced the
+> same 403 with an empty `sub`. Both are fixed: `MapInboundClaims = false` (see §2.2) makes the
+> claims readable, and all lookups resolve via `auth_user_id`.
 
 **`public.users` is created by DB trigger on first `signUp()`:**
 
@@ -129,17 +185,19 @@ Supabase__ServiceRoleKey=<service-role-key>   # Bypasses RLS. Never expose to cl
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO public.users (id, auth_user_id, email, first_name, last_name, email_verified, is_active, created_at, updated_at)
+  -- id is omitted so the table default (gen_random_uuid()) generates an independent
+  -- internal identity; the Supabase auth uid is stored only in auth_user_id.
+  INSERT INTO public.users (auth_user_id, email, first_name, last_name, email_verified, is_active, created_at, updated_at)
   VALUES (
-    NEW.id, NEW.id::TEXT, NEW.email,
+    NEW.id::TEXT, NEW.email,
     COALESCE(NEW.raw_user_meta_data->>'first_name', ''),
     COALESCE(NEW.raw_user_meta_data->>'last_name', ''),
     FALSE, TRUE, NOW(), NOW()
   )
-  ON CONFLICT (id) DO NOTHING;
+  ON CONFLICT (auth_user_id) DO NOTHING;
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 
 CREATE TRIGGER after_auth_user_created
   AFTER INSERT ON auth.users
@@ -172,9 +230,13 @@ CREATE TRIGGER after_auth_user_created
 1. Client: supabase.auth.signInWithPassword({ email, password })
    → Returns { data: { session, user }, error }
 
-2. GET /api/users/me → check email_verified
-   - FALSE → OTP verification flow (Section 5)
-   - TRUE  → router.replace('/home')
+2. GET /api/users/me
+   - 200 (email_verified = TRUE)  → router.replace('/home')
+   - 403 EMAIL_NOT_VERIFIED       → OTP verification flow (Section 5)
+   NOTE: UserActiveCheckMiddleware blocks unverified users on every protected route
+   except PATCH /api/users/email-verification, so an unverified user receives a 403
+   here — NOT a profile body with email_verified=false. The client infers "unverified"
+   from the 403 `code`, it does not read a flag off the response body.
 
 On error:
   - Show generic "Incorrect email or password" — do NOT specify which field
@@ -224,10 +286,10 @@ STEP 3 — Mark verified (C# API)
   Body: {} (identity from JWT 'sub' claim)
 
   C# handler:
-    1. Validate JWT → extract user.id
+    1. Validate JWT → read 'sub' (auth uid) → resolve internal users.id via auth_user_id
     2. UPDATE public.users SET email_verified = TRUE, updated_at = NOW()
-       WHERE id = user.id AND email_verified = FALSE
-    3. INSERT audit_logs (action='user.email_verified', actor_id=user.id)
+       WHERE id = <internal users.id> AND email_verified = FALSE
+    3. INSERT audit_logs (action='user.email_verified', actor_id=<internal users.id>)
     4. Return 200 (idempotent — also 200 if already verified)
 
 STEP 4 — Navigate to /home
@@ -402,6 +464,7 @@ Native platforms cap each key at 2KB. With org claims in the JWT, this may be ex
 
 - `autoRefreshToken: true` — SDK handles refresh automatically. Do not implement manual refresh logic.
 - SDK queues pending requests during refresh; resends with new token. Do not retry on 401 for this reason.
+- The API client must **not** force a sign-out on a 401. Let the SDK refresh; genuine session loss is emitted as `SIGNED_OUT` and handled by the guards. Forcing sign-out on a transient/endpoint 401 bounces a freshly-authenticated user back to login.
 - AppState listener (native only):
 
 ```typescript
@@ -413,22 +476,34 @@ AppState.addEventListener("change", (status) => {
 
 ### 9.2 Auth State Subscription (App root)
 
+A single `onAuthStateChange` subscription is the **only** bootstrap path — supabase-js
+emits `INITIAL_SESSION` on subscribe with the restored session, so there is no separate
+`getSession()` call to race against. The handler updates the Zustand auth store; it does
+**not** call `router.replace` for normal sign-in/out. Navigation is driven by a derived
+`authStatus` that the route guards read:
+
+```
+authStatus = initializing    → still bootstrapping → guards render a loading screen
+             unauthenticated  → no session         → (auth) group
+             unverified       → session, email not verified → (verify) group
+             authenticated    → session + email verified    → (app) group
+```
+
 ```typescript
 supabase.auth.onAuthStateChange((event, session) => {
   switch (event) {
+    case "INITIAL_SESSION":
     case "SIGNED_IN":
-      setUser(session!.user);
+      setSession(session);
+      // resolve email_verified, THEN clear isInitializingAuth so guards never
+      // observe a half-resolved (session, emailVerified) combination
       break;
     case "TOKEN_REFRESHED":
-      setUser(session!.user);
+    case "USER_UPDATED":
+      setSession(session); // session changed; verification status unchanged
       break;
     case "SIGNED_OUT":
-      setUser(null);
-      clearOrgContext();
-      router.replace("/auth/login");
-      break;
-    case "USER_UPDATED":
-      setUser(session!.user);
+      clearAuthAndOrg();   // guards then route to (auth)/login
       break;
     case "PASSWORD_RECOVERY":
       router.replace("/auth/reset-password");
@@ -436,6 +511,11 @@ supabase.auth.onAuthStateChange((event, session) => {
   }
 });
 ```
+
+**The readiness gate (`isInitializingAuth`) closes only after email-verification is
+resolved for an authenticated session.** This eliminates the redirect race that
+previously bounced verified users toward verify-email (and, via the API 401 handler, on
+to login).
 
 ### 9.3 Logout
 
@@ -468,15 +548,26 @@ Supabase Auth does not check `public.users.is_active`. Three-layer mitigation (a
 
 ### 10.1 Row-Level Security
 
-RLS must be enabled on every table. All RLS policies must use `get_user_org_ids()` (STABLE function) — not correlated subqueries.
+RLS must be enabled on every table. Because `public.users.id != auth.uid()`, policies must
+resolve the internal user id via `public.current_user_id()` — **never** compare `auth.uid()`
+directly to `users.id` / `user_id` / `owner_id` / `actor_id` (those are FKs to the internal
+`users.id`). Org-scoped policies use `get_user_org_ids()` (STABLE) — not correlated subqueries.
 
 ```sql
+-- Canonical resolver: JWT sub (auth.uid()) -> internal public.users.id.
+CREATE OR REPLACE FUNCTION public.current_user_id() RETURNS UUID AS $$
+  SELECT id FROM public.users WHERE auth_user_id = auth.uid()::text
+$$ LANGUAGE SQL STABLE SECURITY DEFINER SET search_path = public, pg_temp;
+
 CREATE OR REPLACE FUNCTION public.get_user_org_ids() RETURNS UUID[] AS $$
-  SELECT array_agg(organization_id) FROM public.organization_members WHERE user_id = auth.uid()
-$$ LANGUAGE SQL STABLE SECURITY DEFINER;
+  SELECT array_agg(organization_id) FROM public.organization_members WHERE user_id = public.current_user_id()
+$$ LANGUAGE SQL STABLE SECURITY DEFINER SET search_path = public, pg_temp;
 ```
 
-New tables added in future migrations must include `ALTER TABLE ... ENABLE ROW LEVEL SECURITY`.
+> The app's data path goes through the C# API (privileged Npgsql connection that bypasses RLS),
+> so these policies are defense-in-depth today. The `current_user_id()` rewrite ships in
+> migration `FixUserIdentityModel`. New tables added in future migrations must include
+> `ALTER TABLE ... ENABLE ROW LEVEL SECURITY`.
 
 ### 10.2 Token Leakage Prevention
 
@@ -545,21 +636,27 @@ Enforce client-side before `signUp()` / `updateUser()`. Mirror in Supabase Dashb
 
 ## 11. Post-Login Home Screen — Org Resolution
 
-All successful logins navigate to `/home` after OTP verification.
+All successful logins navigate to `/home` after OTP verification. `/home` fetches the
+user's profile + memberships and **never auto-navigates** — the user always makes an
+explicit choice.
 
 ```
-GET /api/users/me → memberships[]
+GET /api/users/me → user profile + memberships[]
 
 memberships.length === 0 → "Welcome to TuitionIQ"
-                           [Create organisation] | [I have a pending invite]
+                           [Create organisation]   ← only CTA in the current build
+                           (no "pending invite" CTA — invites are out of scope)
 
-memberships.length === 1 → Auto-select org; store organization_id in app state
-                           Navigate: owner/admin/teacher → /dashboard
-                                     student            → /student-portal
-
-memberships.length > 1   → Show org selector; user picks one
-                           Store selected organization_id in app state
+memberships.length >= 1  → ALWAYS show the organisation selector.
+                           No auto-select, even for a single org.
+                           User taps a card → store organization_id → route by role:
+                             owner / admin / teacher → /dashboard
+                             student                 → /student-portal  (future; not built)
 ```
+
+> **Selector is always shown.** Earlier revisions auto-selected the org and skipped the
+> selector when `memberships.length === 1`. That is removed: the selector renders for any
+> user with one or more organisations, and the app never selects on the user's behalf.
 
 **Org context storage:**
 

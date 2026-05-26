@@ -34,6 +34,12 @@ public static class JwtExtensions
         options.Authority = $"{supabaseUrl}/auth/v1";
         options.MetadataAddress = $"{supabaseUrl}/auth/v1/.well-known/openid-configuration";
 
+        // Supabase emits standard OIDC claim names ("sub", "email", "app_metadata").
+        // Without this, the default handler rewrites them to legacy XML URIs
+        // (sub -> ClaimTypes.NameIdentifier, ...), so FindFirst("sub") returns null and
+        // every downstream identity lookup fails closed with ACCOUNT_SUSPENDED.
+        options.MapInboundClaims = false;
+
         options.TokenValidationParameters = new TokenValidationParameters
         {
           ValidateIssuerSigningKey = true,
@@ -42,7 +48,9 @@ public static class JwtExtensions
           ValidIssuer = $"{supabaseUrl}/auth/v1",
           ValidateIssuer = true,
           ValidateLifetime = true,
-          ClockSkew = TimeSpan.FromSeconds(30)
+          ClockSkew = TimeSpan.FromSeconds(30),
+          NameClaimType = "sub",
+          RoleClaimType = "role"
         };
 
         options.RequireHttpsMetadata = true;

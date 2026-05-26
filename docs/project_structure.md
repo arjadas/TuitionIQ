@@ -338,7 +338,10 @@ TuitionIQ.Infrastructure/
 ├── Auth/
 │   ├── SupabaseAdminClient.cs                ← wraps Supabase Admin API (sign-out, ban,
 │   │                                            updateUserById for account-level operations)
-│   ├── CurrentUserService.cs                 ← implements ICurrentUserService; reads 'sub' claim
+│   ├── CurrentUserService.cs                 ← ICurrentUserService; UserId = internal users.id
+│   │                                            (resolved sub→auth_user_id by middleware),
+│   │                                            AuthUserId = JWT 'sub'
+│   ├── CurrentUserContextKeys.cs             ← HttpContext.Items key for the resolved internal id
 │   └── JwtClaimsExtensions.cs               ← parses app_metadata.orgs from JWT
 │
 ├── Email/
@@ -448,7 +451,8 @@ frontend/
 │       │                                        redirects to /verify/verify-email if session
 │       │                                        exists but email_verified = FALSE;
 │       │                                        AppState refresh handler
-│       ├── home.tsx                          ← Org resolution: 0 orgs / 1 org / multi-org
+│       ├── home.tsx                          ← Org resolution: ALWAYS shows the selector (1+ orgs),
+│       │                                        never auto-selects; 0 orgs → welcome + Create org
 │       │
 │       ├── (teacher)/                        ← Teacher + Admin + Owner views
 │       │   ├── _layout.tsx                   ← Role guard; tabs layout
@@ -626,9 +630,12 @@ frontend/
 **Tool: Zustand** — minimal, TypeScript-first, no boilerplate.
 
 ```
-authStore      → session, user, emailVerified (set by onAuthStateChange at app root;
-                 emailVerified loaded from /api/users/me after session is established)
-orgStore       → memberships[], selectedOrgId (loaded once at /home; cleared on sign-out)
+authStore      → session, user, emailVerified, isInitializingAuth → derived authStatus
+                 (initializing | unauthenticated | unverified | authenticated). Set by the
+                 single onAuthStateChange bootstrap; guards read authStatus, and the gate
+                 closes only after email_verified is resolved for an authenticated session.
+orgStore       → memberships[], selectedOrgId (loaded at /home; selectedOrgId persisted to
+                 sessionStorage on web, in-memory on native; cleared on sign-out)
 ```
 
 Server state (lists, detail pages) is managed by **TanStack Query (React Query)**:
