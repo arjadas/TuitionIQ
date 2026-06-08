@@ -14,8 +14,8 @@ using TuitionIQ.Infrastructure.Persistence;
 namespace TuitionIQ.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260526140110_schema.sql")]
-    partial class schemasql
+    [Migration("20260527042519_TuitionIQ-Schema")]
+    partial class TuitionIQSchema
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)

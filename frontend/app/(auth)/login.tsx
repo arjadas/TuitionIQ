@@ -1,5 +1,6 @@
 import { authService } from "@/src/features/auth/services/authService";
 import { PasswordInput } from "@/src/shared/components/ui/PasswordInput";
+import { useAuthStore } from "@/src/store/authStore";
 import { type Href, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, SafeAreaView, StyleSheet, Text, TextInput, View } from "react-native";
@@ -8,9 +9,14 @@ function isInvalidCredentialsError(message: string): boolean {
   return message.toLowerCase().includes("invalid login credentials");
 }
 
+function isEmailNotConfirmedError(message: string): boolean {
+  return message.toLowerCase().includes("email not confirmed");
+}
+
 export default function LoginScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ email?: string; message?: string}>();
+  const setPendingVerificationEmail = useAuthStore((state) => state.setPendingVerificationEmail);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -57,6 +63,12 @@ export default function LoginScreen() {
       if (isInvalidCredentialsError(error.message)) {
         setFailedAttempts((current) => current + 1);
         setErrorMessage("Incorrect email or password.");
+      } else if (isEmailNotConfirmedError(error.message)) {
+        // Signed up but never confirmed their email. Route to verify-email via
+        // the pending-verification state (session-less signup-confirmation path).
+        setPendingVerificationEmail(normalizedEmail);
+        setIsSubmitting(false);
+        return;
       } else {
         setErrorMessage(error.message || "No internet connection. Check your connection and try again.");
       }

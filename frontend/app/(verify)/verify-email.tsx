@@ -1,7 +1,6 @@
 import { useEmailVerification } from "@/src/features/auth/hooks/useEmailVerification";
 import { forceClientSignOut } from "@/src/lib/forceClientSignOut";
 import { useAuthStore } from "@/src/store/authStore";
-import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -18,8 +17,8 @@ import {
 const RESEND_COOLDOWN_SECONDS = 60;
 
 export default function VerifyEmailScreen() {
-  const router = useRouter();
   const session = useAuthStore((state) => state.session);
+  const pendingVerificationEmail = useAuthStore((state) => state.pendingVerificationEmail);
   const { refreshEmailVerificationStatus, sendVerificationOtp, verifyEmailOtp } = useEmailVerification();
 
   const [otpCode, setOtpCode] = useState("");
@@ -28,7 +27,7 @@ export default function VerifyEmailScreen() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
   const [cooldownEndsAt, setCooldownEndsAt] = useState<number | null>(null);
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(0);
 
   const hasAutoSentCode = useRef(false);
 
@@ -73,20 +72,27 @@ export default function VerifyEmailScreen() {
     }
 
     hasAutoSentCode.current = true;
+    if (__DEV__) console.log("[TEMP verify-email] mount effect", { hasSession: Boolean(session) }); // TEMP: remove after verification
     void (async () => {
       try {
         const isVerified = await refreshEmailVerificationStatus();
         if (isVerified) {
-          router.replace("/home");
+          // Already verified: refresh flipped the store; the (verify) guard
+          // redirects to /home. Do NOT navigate imperatively here.
           return;
         }
 
-        await sendCode();
+        // The signup-confirmation path already received a code from
+        // supabase.auth.signUp(); only the session-based (login) path needs one
+        // dispatched here.
+        if (session) {
+          await sendCode();
+        }
       } catch (error) {
         setErrorMessage(error instanceof Error ? error.message : "Could not send verification code.");
       }
     })();
-  }, [refreshEmailVerificationStatus, router, sendCode]);
+  }, [refreshEmailVerificationStatus, sendCode, session]);
 
   useEffect(() => {
     const appStateSubscription = AppState.addEventListener("change", (state: AppStateStatus) => {
@@ -94,22 +100,17 @@ export default function VerifyEmailScreen() {
         return;
       }
 
-      void (async () => {
-        try {
-          const isVerified = await refreshEmailVerificationStatus();
-          if (isVerified) {
-            router.replace("/home");
-          }
-        } catch {
-          // Keep user on the verification screen when status refresh fails.
-        }
-      })();
+      // Re-check on resume; refresh updates the store and the status guards
+      // handle any navigation. No imperative navigation here.
+      void refreshEmailVerificationStatus().catch(() => {
+        // Keep user on the verification screen when status refresh fails.
+      });
     });
 
     return () => {
       appStateSubscription.remove();
     };
-  }, [refreshEmailVerificationStatus, router]);
+  }, [refreshEmailVerificationStatus]);
 
   const verify = async (): Promise<void> => {
     setIsVerifying(true);
@@ -118,7 +119,9 @@ export default function VerifyEmailScreen() {
 
     try {
       await verifyEmailOtp(otpCode);
-      router.replace("/home");
+      if (__DEV__) console.log("[TEMP verify-email] verifyEmailOtp ok -> guard navigates"); // TEMP: remove after verification
+      // Navigation is guard-driven: verifyEmailOtp flips emailVerified, so the
+      // (verify) layout redirects to /home exactly once.
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Could not verify this code.");
     } finally {
@@ -135,7 +138,7 @@ export default function VerifyEmailScreen() {
       <View style={styles.card}>
         <Text style={styles.title}>Verify your email</Text>
         <Text style={styles.subtitle}>
-          We sent a 6-digit verification code to {session?.user?.email ?? "your email"}.
+          We sent a 6-digit verification code to {session?.user?.email ?? pendingVerificationEmail ?? "your email"}.
         </Text>
 
         <View style={styles.fieldBlock}>

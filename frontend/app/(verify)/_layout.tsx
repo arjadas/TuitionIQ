@@ -4,6 +4,7 @@ import { Redirect, Stack } from "expo-router";
 
 export default function VerifyLayout() {
   const status = useAuthStatus();
+  if (__DEV__) console.log("[TEMP guard (verify)]", status); // TEMP: remove after verification
 
   if (status === "initializing") {
     return <AuthLoadingScreen />;

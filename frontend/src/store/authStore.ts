@@ -14,10 +14,18 @@ type AuthState = {
   session: Session | null;
   user: User | null;
   emailVerified: boolean;
+  /**
+   * Set after a session-less `signUp()` (Supabase "Confirm email" is ON, so no
+   * session is issued yet) or after a login that returns "Email not confirmed".
+   * It makes the user `unverified` so the guards route them to verify-email
+   * before any session exists. Cleared once verification completes or on sign-out.
+   */
+  pendingVerificationEmail: string | null;
   isInitializingAuth: boolean;
   setSession: (session: Session | null) => void;
   setUser: (user: User | null) => void;
   setEmailVerified: (value: boolean) => void;
+  setPendingVerificationEmail: (email: string | null) => void;
   setInitializingAuth: (value: boolean) => void;
   clearAuth: () => void;
 };
@@ -26,16 +34,25 @@ export const useAuthStore = create<AuthState>((set) => ({
   session: null,
   user: null,
   emailVerified: false,
+  pendingVerificationEmail: null,
   isInitializingAuth: true,
   setSession: (session) => set({ session }),
   setUser: (user) => set({ user }),
-  setEmailVerified: (value) => set({ emailVerified: value }),
+  setEmailVerified: (value) => {
+    if (__DEV__) console.log("[TEMP store] setEmailVerified", value); // TEMP: remove after verification
+    set({ emailVerified: value });
+  },
+  setPendingVerificationEmail: (email) => {
+    if (__DEV__) console.log("[TEMP store] setPendingVerificationEmail", email); // TEMP: remove after verification
+    set({ pendingVerificationEmail: email });
+  },
   setInitializingAuth: (value) => set({ isInitializingAuth: value }),
   clearAuth: () =>
     set({
       session: null,
       user: null,
       emailVerified: false,
+      pendingVerificationEmail: null,
     }),
 }));
 
@@ -44,15 +61,18 @@ export function selectAuthStatus(state: AuthState): AuthStatus {
     return "initializing";
   }
 
-  if (!state.session) {
-    return "unauthenticated";
+  // A real session is the strongest signal: verified -> authenticated, else unverified.
+  if (state.session) {
+    return state.emailVerified ? "authenticated" : "unverified";
   }
 
-  if (!state.emailVerified) {
+  // No session yet, but a signup/login left a verification pending -> route to
+  // verify-email (session-less signup-confirmation flow).
+  if (state.pendingVerificationEmail) {
     return "unverified";
   }
 
-  return "authenticated";
+  return "unauthenticated";
 }
 
 export const selectIsInitializingAuth = (state: AuthState): boolean => state.isInitializingAuth;
