@@ -73,24 +73,6 @@ async function verifyEmailOtp(email: string, token: string) {
   });
 }
 
-// Confirm a brand-new signup with its 6-digit code. Works without a prior
-// session and establishes one on success.
-async function verifySignupOtp(email: string, token: string) {
-  return supabase.auth.verifyOtp({
-    email,
-    token,
-    type: "signup",
-  });
-}
-
-// Re-send the signup confirmation code (session-less).
-async function resendSignupOtp(email: string) {
-  return supabase.auth.resend({
-    type: "signup",
-    email,
-  });
-}
-
 async function getSession() {
   return supabase.auth.getSession();
 }
@@ -105,7 +87,5 @@ export const authService = {
   updatePassword,
   sendVerificationOtp,
   verifyEmailOtp,
-  verifySignupOtp,
-  resendSignupOtp,
   getSession,
 };

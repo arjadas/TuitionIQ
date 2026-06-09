@@ -4,7 +4,6 @@ import { Redirect, type Href } from "expo-router";
 
 export default function Index() {
   const status = useAuthStatus();
-  if (__DEV__) console.log("[TEMP guard index]", status); // TEMP: remove after verification
 
   if (status === "initializing") {
     return <AuthLoadingScreen />;

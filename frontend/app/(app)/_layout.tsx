@@ -4,7 +4,6 @@ import { Redirect, Stack, type Href } from "expo-router";
 
 export default function AppLayout() {
   const status = useAuthStatus();
-  if (__DEV__) console.log("[TEMP guard (app)]", status); // TEMP: remove after verification
 
   if (status === "initializing") {
     return <AuthLoadingScreen />;

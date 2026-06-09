@@ -18,7 +18,6 @@ const RESEND_COOLDOWN_SECONDS = 60;
 
 export default function VerifyEmailScreen() {
   const session = useAuthStore((state) => state.session);
-  const pendingVerificationEmail = useAuthStore((state) => state.pendingVerificationEmail);
   const { refreshEmailVerificationStatus, sendVerificationOtp, verifyEmailOtp } = useEmailVerification();
 
   const [otpCode, setOtpCode] = useState("");
@@ -72,7 +71,6 @@ export default function VerifyEmailScreen() {
     }
 
     hasAutoSentCode.current = true;
-    if (__DEV__) console.log("[TEMP verify-email] mount effect", { hasSession: Boolean(session) }); // TEMP: remove after verification
     void (async () => {
       try {
         const isVerified = await refreshEmailVerificationStatus();
@@ -82,17 +80,13 @@ export default function VerifyEmailScreen() {
           return;
         }
 
-        // The signup-confirmation path already received a code from
-        // supabase.auth.signUp(); only the session-based (login) path needs one
-        // dispatched here.
-        if (session) {
-          await sendCode();
-        }
+        // Dispatch the OTP for this session's email (authentication.md §5 step 1).
+        await sendCode();
       } catch (error) {
         setErrorMessage(error instanceof Error ? error.message : "Could not send verification code.");
       }
     })();
-  }, [refreshEmailVerificationStatus, sendCode, session]);
+  }, [refreshEmailVerificationStatus, sendCode]);
 
   useEffect(() => {
     const appStateSubscription = AppState.addEventListener("change", (state: AppStateStatus) => {
@@ -119,7 +113,6 @@ export default function VerifyEmailScreen() {
 
     try {
       await verifyEmailOtp(otpCode);
-      if (__DEV__) console.log("[TEMP verify-email] verifyEmailOtp ok -> guard navigates"); // TEMP: remove after verification
       // Navigation is guard-driven: verifyEmailOtp flips emailVerified, so the
       // (verify) layout redirects to /home exactly once.
     } catch (error) {
@@ -130,7 +123,7 @@ export default function VerifyEmailScreen() {
   };
 
   const signOutAndUseDifferentAccount = async (): Promise<void> => {
-    await forceClientSignOut({ redirectTo: "/(auth)/login" });
+    await forceClientSignOut();
   };
 
   return (
@@ -138,7 +131,7 @@ export default function VerifyEmailScreen() {
       <View style={styles.card}>
         <Text style={styles.title}>Verify your email</Text>
         <Text style={styles.subtitle}>
-          We sent a 6-digit verification code to {session?.user?.email ?? pendingVerificationEmail ?? "your email"}.
+          We sent a 6-digit verification code to {session?.user?.email ?? "your email"}.
         </Text>
 
         <View style={styles.fieldBlock}>

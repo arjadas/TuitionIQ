@@ -74,7 +74,6 @@ function getSessionEmail(email: string | null | undefined): string {
 
 export function useEmailVerification() {
   const setEmailVerified = useAuthStore((state) => state.setEmailVerified);
-  const setPendingVerificationEmail = useAuthStore((state) => state.setPendingVerificationEmail);
 
   const getValidatedSession = useCallback(
     async (): Promise<Awaited<ReturnType<typeof authService.getSession>>["data"]["session"]> => {
@@ -99,15 +98,12 @@ export function useEmailVerification() {
     [],
   );
 
-  // Resolve which email to verify and whether a session already exists. The
-  // signup-confirmation flow runs session-less, so fall back to the pending
-  // email captured at signup / "email not confirmed" login.
-  const resolveVerificationTarget = useCallback(async (): Promise<{ email: string; hasSession: boolean }> => {
+  // Resolve which email to verify. Model B always has a session after signUp()
+  // or signInWithPassword() (Supabase "Confirm email" is OFF), so the email comes
+  // from the session user; getSessionEmail throws if somehow signed out.
+  const resolveVerificationEmail = useCallback(async (): Promise<string> => {
     const session = await getValidatedSession();
-    const pendingEmail = useAuthStore.getState().pendingVerificationEmail;
-    const email = getSessionEmail(session?.user?.email ?? pendingEmail);
-    debugAuthVerification("resolved verification target", { email, hasSession: Boolean(session) });
-    return { email, hasSession: Boolean(session) };
+    return getSessionEmail(session?.user?.email);
   }, [getValidatedSession]);
 
   const refreshEmailVerificationStatus = useCallback(async (): Promise<boolean> => {
@@ -149,52 +145,38 @@ export function useEmailVerification() {
   }, [getValidatedSession, setEmailVerified]);
 
   const sendVerificationOtp = useCallback(async (): Promise<void> => {
-    const { email, hasSession } = await resolveVerificationTarget();
-    debugAuthVerification("sending verification OTP", { email, hasSession });
+    const email = await resolveVerificationEmail();
+    debugAuthVerification("sending verification OTP", { email });
 
-    // With a session this is a re-issue for an existing user (type 'email');
-    // without one it re-sends the signup confirmation code (type 'signup').
-    const { error } = hasSession
-      ? await authService.sendVerificationOtp(email)
-      : await authService.resendSignupOtp(email);
-
+    const { error } = await authService.sendVerificationOtp(email);
     if (error) {
       debugAuthVerification("sendVerificationOtp failed", { message: error.message });
       throw new Error(error.message || "Could not send the verification code.");
     }
 
     debugAuthVerification("verification OTP sent");
-  }, [resolveVerificationTarget]);
+  }, [resolveVerificationEmail]);
 
   const verifyEmailOtp = useCallback(
     async (otpCode: string): Promise<void> => {
-      const { email, hasSession } = await resolveVerificationTarget();
+      const email = await resolveVerificationEmail();
       const token = otpCode.trim();
 
       if (token.length !== 6) {
         throw new Error("Enter the 6-digit verification code.");
       }
 
-      debugAuthVerification("verifying OTP", { email, hasSession });
+      debugAuthVerification("verifying OTP", { email });
 
-      // Session-less signup confirmation verifies a 'signup' token and issues a
-      // session; the session-based login-edge path verifies an 'email' token.
-      const { error: otpError } = hasSession
-        ? await authService.verifyEmailOtp(email, token)
-        : await authService.verifySignupOtp(email, token);
+      const { error: otpError } = await authService.verifyEmailOtp(email, token);
       if (otpError) {
         debugAuthVerification("verifyEmailOtp failed", { message: otpError.message });
         throw new Error(otpError.message || "The code is invalid or expired.");
       }
 
-      // verifyOtp(type:'signup') establishes a session; confirm it landed before
-      // calling the protected verification endpoint.
-      const { error: refreshError } = await authService.getSession();
-      if (refreshError) {
-        debugAuthVerification("session refresh after OTP failed", { message: refreshError.message });
-        throw new Error(refreshError.message || "Could not refresh your session.");
-      }
-
+      // Persist the authoritative flag + audit log via the C# API. verifyOtp(type:'email')
+      // reuses the existing session (it does not emit a fresh SIGNED_IN), so this
+      // screen's flow is the SOLE writer of emailVerified=true — no listener races it.
       const isAlreadyVerified = await refreshEmailVerificationStatus();
       if (!isAlreadyVerified) {
         try {
@@ -210,10 +192,9 @@ export function useEmailVerification() {
 
       // Flip the single source of truth; the status guards navigate to /home.
       setEmailVerified(true);
-      setPendingVerificationEmail(null);
       debugAuthVerification("email verification flow completed");
     },
-    [resolveVerificationTarget, refreshEmailVerificationStatus, setEmailVerified, setPendingVerificationEmail],
+    [resolveVerificationEmail, refreshEmailVerificationStatus, setEmailVerified],
   );
 
   return {

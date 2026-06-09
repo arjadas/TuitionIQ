@@ -36,7 +36,8 @@ export default function HomeScreen() {
   const greetingName = currentUser?.firstName?.trim() || "there";
 
   const handleSignOut = (): void => {
-    void forceClientSignOut({ redirectTo: "/(auth)/login" });
+    // Sign out only; SIGNED_OUT clears state and the route guards navigate to login.
+    void forceClientSignOut();
   };
 
   return (

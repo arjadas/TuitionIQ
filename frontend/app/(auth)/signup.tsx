@@ -2,7 +2,6 @@ import { authService } from "@/src/features/auth/services/authService";
 import { PasswordInput } from "@/src/shared/components/ui/PasswordInput";
 import { PasswordStrengthMeter } from "@/src/shared/components/ui/PasswordStrengthMeter";
 import { validatePassword } from "@/src/shared/utils/passwordValidation";
-import { useAuthStore } from "@/src/store/authStore";
 import { type Href, useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import {
@@ -22,7 +21,6 @@ function isExistingUserError(message: string): boolean {
 
 export default function SignupScreen() {
   const router = useRouter();
-  const setPendingVerificationEmail = useAuthStore((state) => state.setPendingVerificationEmail);
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -68,21 +66,12 @@ export default function SignupScreen() {
     setIsSubmitting(true);
     setErrorMessage(null);
 
-    const { data, error } = await authService.signUp({
+    const { error } = await authService.signUp({
       firstName: trimmedFirstName,
       lastName: trimmedLastName,
       email: normalizedEmail,
       password,
     });
-
-    if (__DEV__) {
-      console.log("[TEMP SIGNUP] signUp response", {
-        hasSession: Boolean(data?.session),
-        hasUser: Boolean(data?.user),
-        identitiesLen: data?.user?.identities?.length ?? null,
-        error: error?.message ?? null,
-      }); // TEMP: remove after verification
-    }
 
     if (error) {
       if (isExistingUserError(error.message)) {
@@ -96,12 +85,10 @@ export default function SignupScreen() {
       return;
     }
 
-    // "Confirm email" is ON, so signUp issues no session and Supabase emails a
-    // 6-digit code. Mark verification pending: the status guards then route to
-    // /(verify)/verify-email. Releasing the spinner is safe because navigation
-    // is guard-driven (and prevents the screen from hanging if it is delayed).
-    setPendingVerificationEmail(normalizedEmail);
-    setIsSubmitting(false);
+    // signUp() establishes a session (Supabase "Confirm email" is OFF). The
+    // onAuthStateChange listener publishes it with email_verified = FALSE, so the
+    // route guards route to /(verify)/verify-email. Keep the spinner up until that
+    // navigation unmounts this screen — navigation is guard-driven, exactly like login.
   };
 
   return (

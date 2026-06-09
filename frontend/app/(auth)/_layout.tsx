@@ -6,7 +6,6 @@ export default function AuthLayout() {
   const status = useAuthStatus();
   const segments = useSegments();
   const isResetPassword = segments[segments.length - 1] === "reset-password";
-  if (__DEV__) console.log("[TEMP guard (auth)]", status, segments.join("/")); // TEMP: remove after verification
 
   if (status === "initializing") {
     return <AuthLoadingScreen />;

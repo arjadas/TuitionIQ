@@ -14,18 +14,16 @@ type AuthState = {
   session: Session | null;
   user: User | null;
   emailVerified: boolean;
-  /**
-   * Set after a session-less `signUp()` (Supabase "Confirm email" is ON, so no
-   * session is issued yet) or after a login that returns "Email not confirmed".
-   * It makes the user `unverified` so the guards route them to verify-email
-   * before any session exists. Cleared once verification completes or on sign-out.
-   */
-  pendingVerificationEmail: string | null;
   isInitializingAuth: boolean;
   setSession: (session: Session | null) => void;
   setUser: (user: User | null) => void;
+  /**
+   * Publish session, user and the resolved email_verified flag in a single
+   * atomic update. Used by the auth bootstrap so guards transition straight to
+   * `authenticated`/`unverified` without observing a half-resolved pair.
+   */
+  setResolvedSession: (session: Session, emailVerified: boolean) => void;
   setEmailVerified: (value: boolean) => void;
-  setPendingVerificationEmail: (email: string | null) => void;
   setInitializingAuth: (value: boolean) => void;
   clearAuth: () => void;
 };
@@ -34,25 +32,17 @@ export const useAuthStore = create<AuthState>((set) => ({
   session: null,
   user: null,
   emailVerified: false,
-  pendingVerificationEmail: null,
   isInitializingAuth: true,
   setSession: (session) => set({ session }),
   setUser: (user) => set({ user }),
-  setEmailVerified: (value) => {
-    if (__DEV__) console.log("[TEMP store] setEmailVerified", value); // TEMP: remove after verification
-    set({ emailVerified: value });
-  },
-  setPendingVerificationEmail: (email) => {
-    if (__DEV__) console.log("[TEMP store] setPendingVerificationEmail", email); // TEMP: remove after verification
-    set({ pendingVerificationEmail: email });
-  },
+  setResolvedSession: (session, emailVerified) => set({ session, user: session.user, emailVerified }),
+  setEmailVerified: (value) => set({ emailVerified: value }),
   setInitializingAuth: (value) => set({ isInitializingAuth: value }),
   clearAuth: () =>
     set({
       session: null,
       user: null,
       emailVerified: false,
-      pendingVerificationEmail: null,
     }),
 }));
 
@@ -61,15 +51,12 @@ export function selectAuthStatus(state: AuthState): AuthStatus {
     return "initializing";
   }
 
-  // A real session is the strongest signal: verified -> authenticated, else unverified.
+  // The session is the single source of truth. Both signUp() and
+  // signInWithPassword() establish one (Supabase "Confirm email" is OFF), so
+  // there is no session-less limbo: verified -> authenticated, otherwise the
+  // app-level OTP gate routes the user to verify-email.
   if (state.session) {
     return state.emailVerified ? "authenticated" : "unverified";
-  }
-
-  // No session yet, but a signup/login left a verification pending -> route to
-  // verify-email (session-less signup-confirmation flow).
-  if (state.pendingVerificationEmail) {
-    return "unverified";
   }
 
   return "unauthenticated";

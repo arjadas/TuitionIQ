@@ -36,7 +36,7 @@ export function useAuthSession(options: UseAuthSessionOptions = {}): void {
   const { onPasswordRecovery, onSignedOut } = options;
   const setSession = useAuthStore((state) => state.setSession);
   const setUser = useAuthStore((state) => state.setUser);
-  const setEmailVerified = useAuthStore((state) => state.setEmailVerified);
+  const setResolvedSession = useAuthStore((state) => state.setResolvedSession);
   const setInitializingAuth = useAuthStore((state) => state.setInitializingAuth);
 
   useEffect(() => {
@@ -61,7 +61,7 @@ export function useAuthSession(options: UseAuthSessionOptions = {}): void {
         return profile.emailVerified;
       } catch (error) {
         if (isAccountSuspendedResponse(error)) {
-          await forceClientSignOut({ redirectTo: "/(auth)/login" });
+          await forceClientSignOut();
           return false;
         }
         return false;
@@ -75,7 +75,9 @@ export function useAuthSession(options: UseAuthSessionOptions = {}): void {
         return;
       }
 
-      console.log("[auth/session] onAuthStateChange", { event, hasSession: Boolean(session) });
+      if (__DEV__) {
+        console.log("[auth/session] onAuthStateChange", { event, hasSession: Boolean(session) });
+      }
 
       if (event === "PASSWORD_RECOVERY") {
         applySession(session);
@@ -98,22 +100,29 @@ export function useAuthSession(options: UseAuthSessionOptions = {}): void {
       }
 
       // INITIAL_SESSION (bootstrap) and SIGNED_IN (fresh login).
-      applySession(session);
-
       if (!session) {
+        applySession(null);
         setInitializingAuth(false);
         return;
       }
 
-      // Hold the loading gate up while we resolve verification — this also covers
-      // the transition off the login screen so no half-resolved state is shown.
-      setInitializingAuth(true);
+      // Resolve the authoritative email_verified flag BEFORE publishing the
+      // session, so the guards never observe a half-resolved (session, stale
+      // emailVerified) pair and bounce a verified user toward verify-email.
+      //
+      // The global loading gate only matters during the initial bootstrap (its
+      // initial value is true). A fresh SIGNED_IN happens while the user is still
+      // on the login screen, which keeps its own spinner up until this navigation
+      // unmounts it — so we must NOT re-raise the gate here. Re-raising it
+      // remounted every route guard and produced the web flicker / repeated
+      // history.replaceState.
       void (async () => {
         const verified = await resolveEmailVerified();
         if (!isMounted) {
           return;
         }
-        setEmailVerified(verified);
+        // Publish session + user + emailVerified atomically, then release the gate.
+        setResolvedSession(session, verified);
         setInitializingAuth(false);
       })();
     });
@@ -122,5 +131,5 @@ export function useAuthSession(options: UseAuthSessionOptions = {}): void {
       isMounted = false;
       subscription.unsubscribe();
     };
-  }, [onPasswordRecovery, onSignedOut, setEmailVerified, setInitializingAuth, setSession, setUser]);
+  }, [onPasswordRecovery, onSignedOut, setInitializingAuth, setResolvedSession, setSession, setUser]);
 }

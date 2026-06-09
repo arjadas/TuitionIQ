@@ -1,6 +1,5 @@
 import axios, { type AxiosError } from "axios";
 import Constants from "expo-constants";
-import { router, type Href } from "expo-router";
 import { Platform } from "react-native";
 import { forceClientSignOut } from "@/src/lib/forceClientSignOut";
 import { supabase } from "@/src/lib/supabase";
@@ -119,13 +118,17 @@ apiClient.interceptors.response.use(
     // failed/rejected request (e.g. the post-login /api/users/me probe) into a
     // bounce back to the login screen.
 
+    // The data layer never navigates. We only mutate the auth store; the derived
+    // authStatus drives the redirect through the route guards exactly once
+    // (authentication.md §9.2). Navigating here fought the guards and caused the
+    // repeated history.replaceState calls seen on web during the verify flow.
     if (statusCode === 403 && code === "ACCOUNT_SUSPENDED") {
-      await forceClientSignOut({ redirectTo: "/(auth)/login" });
+      // signOut() emits SIGNED_OUT → guards route to /(auth)/login.
+      await forceClientSignOut();
     }
 
     if (statusCode === 403 && code === "EMAIL_NOT_VERIFIED") {
       useAuthStore.getState().setEmailVerified(false);
-      router.replace("/(verify)/verify-email" as Href);
     }
 
     return Promise.reject(error);

@@ -29,13 +29,23 @@
 > - Invite-based registration (Section 6) and the "I have a pending invite" CTA
 > - `students.user_id` linking, LMS, subscriptions / billing plans
 >
-> Two behaviours also differ from the original spec and are reflected inline below:
+> The following behaviours are reflected inline below:
 >
+> - **Supabase "Confirm email" is OFF.** `signUp()` returns a session immediately (Section 4.1);
+>   email verification is TuitionIQ's own post-login OTP step (Section 5), dispatched via
+>   `signInWithOtp({ shouldCreateUser: false })` and confirmed with `verifyOtp({ type: 'email' })`.
+>   The Supabase **"Magic Link" email template must render `{{ .Token }}`** so a 6-digit code is
+>   delivered (not a confirmation link). `email_verified` is the single app-owned verification flag.
+> - **The session is the single source of truth.** `authStatus ∈ { initializing,
+>   unauthenticated, unverified, authenticated }` is derived purely from `session` +
+>   `email_verified` (there is no session-less "pending verification" state). Route guards render a
+>   loading screen while `initializing` and never act on half-resolved state (Section 9).
+> - **Route guards are the sole navigator.** The data layer (API client, auth-state listener)
+>   never calls `router.replace`; it only mutates the auth store, and the derived `authStatus`
+>   drives every redirect exactly once. This prevents the duplicate `history.replaceState` /
+>   redirect loops previously seen on web during the verify flow.
 > - **Org resolution always shows the selector** for one or more memberships and **never
 >   auto-selects**, even for a single org (Section 11).
-> - **Auth bootstrap is an explicit state machine** — `authStatus ∈ { initializing,
->   unauthenticated, unverified, authenticated }`. Route guards render a loading screen
->   while `initializing` and never act on half-resolved state (Section 9).
 
 ---
 
