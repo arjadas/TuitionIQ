@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 using Microsoft.Extensions.Configuration;
+using Npgsql;
 
 namespace TuitionIQ.Infrastructure.Persistence;
 
@@ -23,8 +24,15 @@ public class AppDbContextFactory : IDesignTimeDbContextFactory<AppDbContext>
       ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found in configuration.");
 
 
+    // Mirror the runtime data source: EnableDynamicJson() so jsonb Dictionary<string, object?>
+    // columns serialize correctly if this design-time context is ever used to write data.
+    // Not required for DDL migrations, but keeps parity with Program.cs.
+    var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString);
+    dataSourceBuilder.EnableDynamicJson();
+    var dataSource = dataSourceBuilder.Build();
+
     var optionsBuilder = new DbContextOptionsBuilder<AppDbContext>();
-    optionsBuilder.UseNpgsql(connectionString);
+    optionsBuilder.UseNpgsql(dataSource);
 
     return new AppDbContext(optionsBuilder.Options);
   }

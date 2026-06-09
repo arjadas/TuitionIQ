@@ -2,6 +2,7 @@ using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi;
+using Npgsql;
 using TuitionIQ.Api.Extensions;
 using TuitionIQ.Api.Middleware;
 using TuitionIQ.Application.Common.Behaviors;
@@ -17,14 +18,26 @@ var applicationAssembly = typeof(TuitionIQ.Application.AssemblyReference).Assemb
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 
-builder.Services.AddDbContext<AppDbContext>(options =>
-{
-  // Get the connection string from configuration (e.g. appsettings.json/ environment variables)
-  var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? throw new InvalidOperationException("ConnectionStrings:DefaultConnection is not configured.");
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+  ?? throw new InvalidOperationException("ConnectionStrings:DefaultConnection is not configured.");
 
-  // Use Npgsql for PostgreSQL database access
-  options.UseNpgsql(connectionString);
+// A single, app-wide NpgsqlDataSource owns the connection pool and the type mappings.
+// EnableDynamicJson() opts in to reflection-based System.Text.Json serialization, which Npgsql 8+
+// requires to write Dictionary<string, object?> (and other dynamic shapes) to jsonb columns
+// (organizations.settings, students.metadata, audit_logs.old_values/new_values). Without it,
+// Npgsql throws InvalidCastException on every jsonb dictionary write.
+// Registered via a factory lambda so the DI container owns the data source's disposal and a single
+// connection pool is shared process-wide (not one per request).
+builder.Services.AddSingleton<NpgsqlDataSource>(_ =>
+{
+  var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString);
+  dataSourceBuilder.EnableDynamicJson();
+  return dataSourceBuilder.Build();
+});
+
+builder.Services.AddDbContext<AppDbContext>((serviceProvider, options) =>
+{
+  options.UseNpgsql(serviceProvider.GetRequiredService<NpgsqlDataSource>());
 });
 
 builder.Services.AddSupabaseJwtAuthentication(builder.Configuration);
