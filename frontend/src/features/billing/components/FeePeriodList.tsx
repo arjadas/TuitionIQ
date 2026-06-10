@@ -6,12 +6,14 @@ type FeePeriodListProps = {
   periods: FeePeriodDto[];
   selectedPeriodId?: string | null;
   onSelectPeriod?: (period: FeePeriodDto) => void;
+  onWaive?: (period: FeePeriodDto) => void;
 };
 
 export function FeePeriodList({
   periods,
   selectedPeriodId = null,
   onSelectPeriod,
+  onWaive,
 }: FeePeriodListProps) {
   if (periods.length === 0) {
     return (
@@ -30,6 +32,7 @@ export function FeePeriodList({
         <FeePeriodCard
           key={period.id}
           onPress={onSelectPeriod}
+          onWaive={onWaive}
           period={period}
           selected={selectedPeriodId === period.id}
         />

@@ -18,6 +18,7 @@ import {
   useOrgMemberships,
 } from "@/src/features/organizations/hooks/useOrgMemberships";
 import { organizationsApiClient } from "@/src/features/organizations/services/organizationsApiClient";
+import { OrgStudentsCard } from "@/src/features/students/components/OrgStudentsCard";
 import { Avatar } from "@/src/shared/components/ui/Avatar";
 import { Button } from "@/src/shared/components/ui/Button";
 import { Card } from "@/src/shared/components/ui/Card";
@@ -229,6 +230,19 @@ export default function DashboardScreen() {
             <Text style={styles.metaValue}>{formatDate(organization.createdAt)}</Text>
           </View>
         </Card>
+
+        <OrgStudentsCard
+          orgId={selectedOrgId}
+          onAddStudent={() => {
+            router.push("/(app)/(teacher)/students/new" as Href);
+          }}
+          onSeeAll={() => {
+            router.push("/(app)/(teacher)/students" as Href);
+          }}
+          onSelectStudent={(studentId) => {
+            router.push(`/(app)/(teacher)/students/${studentId}` as Href);
+          }}
+        />
 
         <Card>
           <Text style={styles.sectionTitle}>Organisation name</Text>

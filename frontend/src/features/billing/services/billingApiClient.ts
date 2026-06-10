@@ -62,6 +62,14 @@ async function setFee(orgId: string, studentId: string, body: SetFeeRequest): Pr
   return data;
 }
 
+async function getFeeHistory(orgId: string, studentId: string): Promise<StudentFeeConfigDto[]> {
+  const { data } = await apiClient.get<StudentFeeConfigDto[]>(
+    `/api/organizations/${orgId}/students/${studentId}/fees`,
+  );
+
+  return data;
+}
+
 export const billingApiClient = {
   getFeePeriods,
   getPaymentsForPeriod,
@@ -69,4 +77,5 @@ export const billingApiClient = {
   reversePayment,
   waivePeriod,
   setFee,
+  getFeeHistory,
 };

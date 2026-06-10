@@ -6,7 +6,11 @@ type FeePeriodCardProps = {
   period: FeePeriodDto;
   selected?: boolean;
   onPress?: (period: FeePeriodDto) => void;
+  onWaive?: (period: FeePeriodDto) => void;
 };
+
+// Periods that are already paid or waived are not offered a waive action in the UI.
+const WAIVABLE_STATUSES = ["unpaid", "partial", "overdue"];
 
 function getStatusPalette(status: string): { badge: string; text: string } {
   switch (status.trim().toLowerCase()) {
@@ -33,45 +37,59 @@ function buildPeriodTitle(period: FeePeriodDto): string {
   return `${period.periodYear}-${String(period.periodMonth).padStart(2, "0")}`;
 }
 
-export function FeePeriodCard({ period, selected = false, onPress }: FeePeriodCardProps) {
+export function FeePeriodCard({ period, selected = false, onPress, onWaive }: FeePeriodCardProps) {
   const statusPalette = getStatusPalette(period.status);
   const balanceAmount = getBalanceAmount(period);
+  const isWaivable = WAIVABLE_STATUSES.includes(period.status.trim().toLowerCase());
 
   return (
-    <Pressable
-      disabled={!onPress}
-      onPress={() => {
-        onPress?.(period);
-      }}
-      style={[styles.card, selected && styles.selectedCard]}
-    >
-      <View style={styles.headerRow}>
-        <Text style={styles.periodTitle}>Period {buildPeriodTitle(period)}</Text>
+    <View style={[styles.card, selected && styles.selectedCard]}>
+      <Pressable
+        disabled={!onPress}
+        onPress={() => {
+          onPress?.(period);
+        }}
+        style={styles.contentArea}
+      >
+        <View style={styles.headerRow}>
+          <Text style={styles.periodTitle}>Period {buildPeriodTitle(period)}</Text>
 
-        <View style={[styles.statusBadge, { backgroundColor: statusPalette.badge }]}>
-          <Text style={[styles.statusText, { color: statusPalette.text }]}>{period.status}</Text>
-        </View>
-      </View>
-
-      <View style={styles.amountGrid}>
-        <View style={styles.amountCell}>
-          <Text style={styles.amountLabel}>Fee</Text>
-          <Text style={styles.amountValue}>{formatCurrency(period.fee, period.currency)}</Text>
+          <View style={[styles.statusBadge, { backgroundColor: statusPalette.badge }]}>
+            <Text style={[styles.statusText, { color: statusPalette.text }]}>{period.status}</Text>
+          </View>
         </View>
 
-        <View style={styles.amountCell}>
-          <Text style={styles.amountLabel}>Paid</Text>
-          <Text style={styles.amountValue}>{formatCurrency(period.amountPaid, period.currency)}</Text>
+        <View style={styles.amountGrid}>
+          <View style={styles.amountCell}>
+            <Text style={styles.amountLabel}>Fee</Text>
+            <Text style={styles.amountValue}>{formatCurrency(period.fee, period.currency)}</Text>
+          </View>
+
+          <View style={styles.amountCell}>
+            <Text style={styles.amountLabel}>Paid</Text>
+            <Text style={styles.amountValue}>{formatCurrency(period.amountPaid, period.currency)}</Text>
+          </View>
+
+          <View style={styles.amountCell}>
+            <Text style={styles.amountLabel}>Balance</Text>
+            <Text style={styles.amountValue}>{formatCurrency(balanceAmount, period.currency)}</Text>
+          </View>
         </View>
 
-        <View style={styles.amountCell}>
-          <Text style={styles.amountLabel}>Balance</Text>
-          <Text style={styles.amountValue}>{formatCurrency(balanceAmount, period.currency)}</Text>
-        </View>
-      </View>
+        {period.dueDate ? <Text style={styles.metaText}>Due date: {period.dueDate}</Text> : null}
+      </Pressable>
 
-      {period.dueDate ? <Text style={styles.metaText}>Due date: {period.dueDate}</Text> : null}
-    </Pressable>
+      {onWaive && isWaivable ? (
+        <Pressable
+          onPress={() => {
+            onWaive(period);
+          }}
+          style={styles.waiveButton}
+        >
+          <Text style={styles.waiveButtonText}>Waive period</Text>
+        </Pressable>
+      ) : null}
+    </View>
   );
 }
 
@@ -133,5 +151,22 @@ const styles = StyleSheet.create({
   metaText: {
     fontSize: 12,
     color: "#64748b",
+  },
+  contentArea: {
+    gap: 10,
+  },
+  waiveButton: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#ddd6fe",
+    backgroundColor: "#f5f3ff",
+    minHeight: 38,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  waiveButtonText: {
+    color: "#5b21b6",
+    fontSize: 13,
+    fontWeight: "700",
   },
 });

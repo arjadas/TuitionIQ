@@ -6,3 +6,6 @@ export const paymentsQueryKey = (
   studentId: string | null,
   periodId: string | null,
 ) => ["billing", "payments", orgId, studentId, periodId] as const;
+
+export const feeHistoryQueryKey = (orgId: string | null, studentId: string | null) =>
+  ["billing", "fees", orgId, studentId] as const;

@@ -1,10 +1,10 @@
-import type { SetFeeRequest } from "@tuitioniq/types";
+import type { FeePeriodDto, SetFeeRequest } from "@tuitioniq/types";
 import { type Href, useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from "react-native";
 import { FeePeriodList } from "@/src/features/billing/components/FeePeriodList";
 import { SetFeeForm } from "@/src/features/billing/components/SetFeeForm";
-import { useFeePeriods, useSetFee } from "@/src/features/billing/hooks/useFeePeriods";
+import { useFeePeriods, useSetFee, useWaivePeriod } from "@/src/features/billing/hooks/useFeePeriods";
 import { getApiErrorMessage } from "@/src/shared/utils/apiError";
 import { resolveRouteParam } from "@/src/shared/utils/resolveRouteParam";
 import { useOrgStore } from "@/src/store/orgStore";
@@ -17,12 +17,35 @@ export default function StudentFeePeriodsScreen() {
   const studentId = useMemo(() => resolveRouteParam(params.studentId), [params.studentId]);
   const feePeriodsQuery = useFeePeriods(studentId);
   const setFeeMutation = useSetFee(studentId);
+  const waivePeriodMutation = useWaivePeriod(studentId);
 
   const [showSetFeeForm, setShowSetFeeForm] = useState(false);
 
   const submitSetFee = async (payload: SetFeeRequest): Promise<void> => {
     await setFeeMutation.mutateAsync(payload);
     setShowSetFeeForm(false);
+  };
+
+  const confirmWaive = (period: FeePeriodDto): void => {
+    const periodLabel = `${period.periodYear}-${String(period.periodMonth).padStart(2, "0")}`;
+
+    Alert.alert(
+      "Waive period",
+      `Mark period ${periodLabel} as waived? The fee owed will no longer be collectible.`,
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Waive",
+          style: "destructive",
+          onPress: () => {
+            void waivePeriodMutation.mutateAsync({ periodId: period.id, body: { waiverReason: null } });
+          },
+        },
+      ],
+    );
   };
 
   if (!selectedOrgId) {
@@ -136,8 +159,15 @@ export default function StudentFeePeriodsScreen() {
                 `/(app)/(teacher)/students/${studentId}/payments?periodId=${period.id}` as Href,
               );
             }}
+            onWaive={confirmWaive}
             periods={feePeriodsQuery.data ?? []}
           />
+
+          {waivePeriodMutation.isError ? (
+            <Text style={styles.waiveErrorText}>
+              {getApiErrorMessage(waivePeriodMutation.error) ?? "Could not waive period."}
+            </Text>
+          ) : null}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -252,5 +282,9 @@ const styles = StyleSheet.create({
     color: "#64748b",
     textAlign: "center",
     lineHeight: 20,
+  },
+  waiveErrorText: {
+    fontSize: 13,
+    color: "#b91c1c",
   },
 });

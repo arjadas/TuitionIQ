@@ -1,6 +1,10 @@
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
 import type { FeePeriodDto, RecordPaymentRequest, SetFeeRequest, WaivePeriodRequest } from "@tuitioniq/types";
-import { feePeriodsQueryKey, paymentsQueryKey } from "@/src/features/billing/hooks/billingQueryKeys";
+import {
+  feeHistoryQueryKey,
+  feePeriodsQueryKey,
+  paymentsQueryKey,
+} from "@/src/features/billing/hooks/billingQueryKeys";
 import { billingApiClient } from "@/src/features/billing/services/billingApiClient";
 import { useOrgStore } from "@/src/store/orgStore";
 
@@ -95,6 +99,10 @@ export function useSetFee(studentId: string | null) {
     onSuccess: async () => {
       await queryClient.invalidateQueries({
         queryKey: feePeriodsQueryKey(selectedOrgId, studentId),
+      });
+
+      await queryClient.invalidateQueries({
+        queryKey: feeHistoryQueryKey(selectedOrgId, studentId),
       });
     },
   });

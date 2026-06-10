@@ -1,4 +1,4 @@
-import type { CreateStudentRequest, UpdateStudentRequest } from "@tuitioniq/types";
+import type { CreateStudentRequest, SetFeeRequest, UpdateStudentRequest } from "@tuitioniq/types";
 import { type Href, useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import {
@@ -11,11 +11,15 @@ import {
   Text,
   View,
 } from "react-native";
+import { SetFeeForm } from "@/src/features/billing/components/SetFeeForm";
+import { useFeeHistory } from "@/src/features/billing/hooks/useFeeHistory";
+import { useSetFee } from "@/src/features/billing/hooks/useFeePeriods";
 import { AccountStatusBadge } from "@/src/features/students/components/AccountStatusBadge";
 import { StudentForm } from "@/src/features/students/components/StudentForm";
 import { useStudent } from "@/src/features/students/hooks/useStudent";
 import { useDeleteStudent, useUpdateStudent } from "@/src/features/students/hooks/useStudents";
 import { getApiErrorMessage } from "@/src/shared/utils/apiError";
+import { formatCurrency } from "@/src/shared/utils/formatCurrency";
 import { useOrgStore } from "@/src/store/orgStore";
 
 function resolveStudentId(input: string | string[] | undefined): string | null {
@@ -48,8 +52,11 @@ export default function StudentDetailScreen() {
   const studentQuery = useStudent(selectedOrgId, studentId);
   const updateStudentMutation = useUpdateStudent(selectedOrgId);
   const deleteStudentMutation = useDeleteStudent(selectedOrgId);
+  const feeHistoryQuery = useFeeHistory(studentId);
+  const setFeeMutation = useSetFee(studentId);
 
   const [isEditing, setIsEditing] = useState(false);
+  const [showSetFeeForm, setShowSetFeeForm] = useState(false);
   const [deleteErrorMessage, setDeleteErrorMessage] = useState<string | null>(null);
 
   const save = async (payload: CreateStudentRequest): Promise<void> => {
@@ -72,6 +79,11 @@ export default function StudentDetailScreen() {
     });
 
     setIsEditing(false);
+  };
+
+  const submitSetFee = async (payload: SetFeeRequest): Promise<void> => {
+    await setFeeMutation.mutateAsync(payload);
+    setShowSetFeeForm(false);
   };
 
   const confirmDelete = (): void => {
@@ -161,6 +173,7 @@ export default function StudentDetailScreen() {
   }
 
   const student = studentQuery.data;
+  const activeFee = feeHistoryQuery.data?.find((fee) => fee.isActive) ?? null;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -221,6 +234,69 @@ export default function StudentDetailScreen() {
           </View>
 
           {deleteErrorMessage ? <Text style={styles.errorText}>{deleteErrorMessage}</Text> : null}
+        </View>
+
+        <View style={styles.card}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Fee configuration</Text>
+            <Pressable
+              onPress={() => {
+                setShowSetFeeForm((current) => !current);
+              }}
+              style={styles.secondaryButton}
+            >
+              <Text style={styles.secondaryButtonText}>
+                {showSetFeeForm ? "Close" : "Set / update fee"}
+              </Text>
+            </Pressable>
+          </View>
+
+          {feeHistoryQuery.isPending ? (
+            <View style={styles.inlineState}>
+              <ActivityIndicator color="#1d4ed8" />
+              <Text style={styles.bodyText}>Loading fee configuration...</Text>
+            </View>
+          ) : null}
+
+          {feeHistoryQuery.isError ? (
+            <Text style={styles.errorText}>
+              {getApiErrorMessage(feeHistoryQuery.error) ?? "Could not load fee configuration."}
+            </Text>
+          ) : null}
+
+          {!feeHistoryQuery.isPending && !feeHistoryQuery.isError ? (
+            activeFee ? (
+              <View style={styles.metaList}>
+                <Text style={styles.metaItem}>Source: {activeFee.feeSource}</Text>
+                <Text style={styles.metaItem}>
+                  Amount:{" "}
+                  {activeFee.manualFee != null
+                    ? formatCurrency(activeFee.manualFee, activeFee.currency)
+                    : "Calculated"}
+                </Text>
+                <Text style={styles.metaItem}>Effective from: {activeFee.effectiveFrom}</Text>
+                {activeFee.notes ? <Text style={styles.metaItem}>Notes: {activeFee.notes}</Text> : null}
+              </View>
+            ) : (
+              <Text style={styles.bodyText}>No active fee configured.</Text>
+            )
+          ) : null}
+
+          {showSetFeeForm ? (
+            <SetFeeForm
+              errorMessage={
+                setFeeMutation.isError
+                  ? (getApiErrorMessage(setFeeMutation.error) ?? "Could not set fee.")
+                  : null
+              }
+              isSubmitting={setFeeMutation.isPending}
+              onCancel={() => {
+                setShowSetFeeForm(false);
+              }}
+              onSubmit={submitSetFee}
+              submitLabel="Save fee"
+            />
+          ) : null}
         </View>
 
         {isEditing ? (
@@ -295,6 +371,17 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "700",
     color: "#0f172a",
+  },
+  sectionHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 10,
+  },
+  inlineState: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   bodyText: {
     fontSize: 14,
