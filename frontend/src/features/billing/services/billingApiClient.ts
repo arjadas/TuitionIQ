@@ -1,6 +1,7 @@
 import type {
   FeePaymentDto,
   FeePeriodDto,
+  OrgFeePeriodDto,
   RecordPaymentRequest,
   SetFeeRequest,
   StudentFeeConfigDto,
@@ -70,6 +71,26 @@ async function getFeeHistory(orgId: string, studentId: string): Promise<StudentF
   return data;
 }
 
+async function getOrgPeriods(
+  orgId: string,
+  params: { year?: number; month?: number; status?: string },
+): Promise<OrgFeePeriodDto[]> {
+  const { data } = await apiClient.get<OrgFeePeriodDto[]>(
+    `/api/organizations/${orgId}/periods`,
+    { params },
+  );
+
+  return data;
+}
+
+async function getOrgPeriodById(orgId: string, periodId: string): Promise<OrgFeePeriodDto> {
+  const { data } = await apiClient.get<OrgFeePeriodDto>(
+    `/api/organizations/${orgId}/periods/${periodId}`,
+  );
+
+  return data;
+}
+
 export const billingApiClient = {
   getFeePeriods,
   getPaymentsForPeriod,
@@ -78,4 +99,6 @@ export const billingApiClient = {
   waivePeriod,
   setFee,
   getFeeHistory,
+  getOrgPeriods,
+  getOrgPeriodById,
 };

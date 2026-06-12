@@ -1,22 +1,10 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { UpdateOrganizationRequest } from "@tuitioniq/types";
+import { Ionicons } from "@expo/vector-icons";
+import { useQuery } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 import { type Href, useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
-import {
-  organizationsMembershipsQueryKey,
-  useOrgMemberships,
-} from "@/src/features/organizations/hooks/useOrgMemberships";
+import { useEffect, useMemo } from "react";
+import { ActivityIndicator, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useOrgMemberships } from "@/src/features/organizations/hooks/useOrgMemberships";
 import { organizationsApiClient } from "@/src/features/organizations/services/organizationsApiClient";
 import { OrgStudentsCard } from "@/src/features/students/components/OrgStudentsCard";
 import { Avatar } from "@/src/shared/components/ui/Avatar";
@@ -63,15 +51,10 @@ function formatDate(value: string): string {
 
 export default function DashboardScreen() {
   const router = useRouter();
-  const queryClient = useQueryClient();
   const selectedOrgId = useOrgStore((state) => state.selectedOrgId);
-  const setMemberships = useOrgStore((state) => state.setMemberships);
 
   const membershipsQuery = useOrgMemberships();
   const memberships = useMemo(() => membershipsQuery.data ?? [], [membershipsQuery.data]);
-
-  const [name, setName] = useState("");
-  const [validationError, setValidationError] = useState<string | null>(null);
 
   // Never auto-select. If no org has been chosen (e.g. native restart cleared the
   // in-memory selection), send the user back to the selector to pick one.
@@ -94,69 +77,6 @@ export default function DashboardScreen() {
     queryFn: () => organizationsApiClient.getOrg(selectedOrgId!),
     enabled: Boolean(selectedOrgId),
   });
-
-  useEffect(() => {
-    if (organizationQuery.data) {
-      setName(organizationQuery.data.name);
-    }
-  }, [organizationQuery.data]);
-
-  const updateMutation = useMutation({
-    mutationFn: async (payload: UpdateOrganizationRequest) => {
-      if (!selectedOrgId) {
-        throw new Error("No organization is selected.");
-      }
-
-      return organizationsApiClient.updateOrg(selectedOrgId, payload);
-    },
-    onSuccess: async (organization) => {
-      queryClient.setQueryData(organizationDetailsQueryKey(organization.id), organization);
-
-      const refreshedMemberships = await organizationsApiClient.getMyMemberships();
-      setMemberships(refreshedMemberships);
-      queryClient.setQueryData(organizationsMembershipsQueryKey, refreshedMemberships);
-
-      await queryClient.invalidateQueries({
-        queryKey: organizationsMembershipsQueryKey,
-      });
-
-      setValidationError(null);
-    },
-  });
-
-  const canSubmit = useMemo(() => {
-    const trimmedName = name.trim();
-    const currentName = organizationQuery.data?.name ?? "";
-
-    return (
-      trimmedName.length > 0
-      && trimmedName.length <= 255
-      && trimmedName !== currentName
-      && !updateMutation.isPending
-    );
-  }, [name, organizationQuery.data?.name, updateMutation.isPending]);
-
-  const submit = async (): Promise<void> => {
-    const trimmedName = name.trim();
-
-    if (!selectedOrgId) {
-      setValidationError("Select an organization before updating.");
-      return;
-    }
-
-    if (trimmedName.length === 0) {
-      setValidationError("Organization name is required.");
-      return;
-    }
-
-    if (trimmedName.length > 255) {
-      setValidationError("Organization name must be 255 characters or fewer.");
-      return;
-    }
-
-    setValidationError(null);
-    await updateMutation.mutateAsync({ name: trimmedName });
-  };
 
   const goToSelector = (): void => {
     router.replace("/home" as Href);
@@ -245,29 +165,18 @@ export default function DashboardScreen() {
         />
 
         <Card>
-          <Text style={styles.sectionTitle}>Organisation name</Text>
-          <TextInput
-            onChangeText={setName}
-            placeholder="Organisation name"
-            style={styles.input}
-            value={name}
-          />
-
-          {validationError ? <Text style={styles.errorText}>{validationError}</Text> : null}
-          {updateMutation.isError ? (
-            <Text style={styles.errorText}>
-              {getErrorMessage(updateMutation.error, "Could not update organization.")}
-            </Text>
-          ) : null}
-
-          <Button
-            label="Save changes"
-            onPress={() => {
-              void submit();
-            }}
-            loading={updateMutation.isPending}
-            disabled={!canSubmit}
-          />
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.push("/settings" as Href)}
+            style={styles.linkRow}
+          >
+            <Ionicons name="settings-outline" size={18} color={colors.textMuted} />
+            <View style={styles.linkText}>
+              <Text style={styles.linkTitle}>Organisation settings</Text>
+              <Text style={styles.linkBody}>Edit the organisation name, view plan and slug.</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+          </Pressable>
         </Card>
 
         <Pressable accessibilityRole="button" onPress={goToSelector} style={styles.switchOrg}>
@@ -325,11 +234,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: colors.textPrimary,
   },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: colors.textPrimary,
-  },
   metaRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -344,15 +248,23 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: colors.textPrimary,
   },
-  input: {
-    borderWidth: 1,
-    borderColor: "#CBD5E1",
-    borderRadius: 12,
-    backgroundColor: colors.surface,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-    fontSize: 16,
+  linkRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 11,
+  },
+  linkText: {
+    flex: 1,
+    gap: 2,
+  },
+  linkTitle: {
+    fontSize: 15,
+    fontWeight: "600",
     color: colors.textPrimary,
+  },
+  linkBody: {
+    fontSize: 12,
+    color: colors.textMuted,
   },
   mutedText: {
     fontSize: 14,
