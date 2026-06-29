@@ -213,6 +213,30 @@ export default function StudentDetailScreen() {
 
             <Pressable
               onPress={() => {
+                router.push({
+                  pathname: "/billing/tracker",
+                  params: { studentId, studentName: `${student.firstName} ${student.lastName}`.trim() },
+                } as Href);
+              }}
+              style={styles.secondaryButton}
+            >
+              <Text style={styles.secondaryButtonText}>Payment tracker</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => {
+                router.push({
+                  pathname: "/billing/record",
+                  params: { studentId, studentName: `${student.firstName} ${student.lastName}`.trim() },
+                } as Href);
+              }}
+              style={styles.secondaryButton}
+            >
+              <Text style={styles.secondaryButtonText}>Record payment</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => {
                 setIsEditing((current) => !current);
               }}
               style={styles.secondaryButton}

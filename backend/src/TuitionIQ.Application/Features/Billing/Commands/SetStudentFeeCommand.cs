@@ -195,6 +195,40 @@ public sealed class SetStudentFeeCommandHandler : IRequestHandler<SetStudentFeeC
         NewValues = ToAuditValues(newStudentFee)
       });
 
+      // Eagerly materialise one billing period per calendar month from the fee's
+      // effective (enrolment) month through the current month, so payments can be
+      // recorded against real periods. Months that already have a (non-deleted)
+      // period are skipped — a period's fee is immutable once created.
+      var generatedPeriods = await GenerateMissingMonthlyPeriodsAsync(
+        request,
+        newStudentFee,
+        manualFee,
+        normalizedCurrency,
+        today,
+        now,
+        cancellationToken);
+
+      if (generatedPeriods.Count > 0)
+      {
+        var firstPeriod = generatedPeriods[0];
+        var lastPeriod = generatedPeriods[^1];
+
+        _auditLogService.Add(new AuditLog(Guid.NewGuid(), "fee_periods.generated", "fee_periods", now)
+        {
+          OrganizationId = request.OrganizationId,
+          ActorId = request.UserId,
+          EntityId = newStudentFee.Id,
+          NewValues = new Dictionary<string, object?>
+          {
+            ["student_id"] = request.StudentId,
+            ["student_fee_id"] = newStudentFee.Id,
+            ["generated_count"] = generatedPeriods.Count,
+            ["from_period"] = $"{firstPeriod.PeriodYear:0000}-{firstPeriod.PeriodMonth:00}",
+            ["to_period"] = $"{lastPeriod.PeriodYear:0000}-{lastPeriod.PeriodMonth:00}"
+          }
+        });
+      }
+
       await _dbContext.SaveChangesAsync(cancellationToken);
       await transaction.CommitAsync(cancellationToken);
 
@@ -205,6 +239,87 @@ public sealed class SetStudentFeeCommandHandler : IRequestHandler<SetStudentFeeC
       await transaction.RollbackAsync(cancellationToken);
       throw;
     }
+  }
+
+  private async Task<List<FeePeriod>> GenerateMissingMonthlyPeriodsAsync(
+    SetStudentFeeCommand request,
+    StudentFee studentFee,
+    long? resolvedFee,
+    string normalizedCurrency,
+    DateOnly today,
+    DateTimeOffset now,
+    CancellationToken cancellationToken)
+  {
+    var generated = new List<FeePeriod>();
+
+    // A concrete monthly amount is required to snapshot a period's fee. ClassCalculated
+    // configs have no flat amount here, so their periods are produced elsewhere.
+    if (resolvedFee is not long monthlyFee)
+    {
+      return generated;
+    }
+
+    // Nothing to generate if the fee becomes effective in a future month.
+    var startMonth = new DateOnly(request.EffectiveFrom.Year, request.EffectiveFrom.Month, 1);
+    var currentMonth = new DateOnly(today.Year, today.Month, 1);
+    if (startMonth > currentMonth)
+    {
+      return generated;
+    }
+
+    var existingPeriodKeys = await GetExistingPeriodKeysAsync(
+      request.OrganizationId,
+      request.StudentId,
+      cancellationToken);
+
+    for (var cursor = startMonth; cursor <= currentMonth; cursor = cursor.AddMonths(1))
+    {
+      var periodKey = (cursor.Year * 100) + cursor.Month;
+      if (existingPeriodKeys.Contains(periodKey))
+      {
+        continue;
+      }
+
+      var daysInMonth = DateTime.DaysInMonth(cursor.Year, cursor.Month);
+
+      var period = new FeePeriod
+      {
+        Id = Guid.NewGuid(),
+        OrganizationId = request.OrganizationId,
+        StudentId = request.StudentId,
+        StudentFeeId = studentFee.Id,
+        PeriodYear = (short)cursor.Year,
+        PeriodMonth = (short)cursor.Month,
+        Fee = monthlyFee,
+        AmountPaid = 0,
+        Currency = normalizedCurrency,
+        Status = FeePeriodStatus.Unpaid,
+        DueDate = new DateOnly(cursor.Year, cursor.Month, daysInMonth),
+        CreatedAt = now,
+        UpdatedAt = now
+      };
+
+      _dbContext.Add(period);
+      generated.Add(period);
+    }
+
+    return generated;
+  }
+
+  private async Task<HashSet<int>> GetExistingPeriodKeysAsync(
+    Guid organizationId,
+    Guid studentId,
+    CancellationToken cancellationToken)
+  {
+    IQueryable<int> periodKeysQuery = _dbContext.FeePeriods
+      .Where(feePeriod =>
+        feePeriod.OrganizationId == organizationId
+        && feePeriod.StudentId == studentId
+        && feePeriod.DeletedAt == null)
+      .Select(feePeriod => (feePeriod.PeriodYear * 100) + feePeriod.PeriodMonth);
+
+    var periodKeys = await _dbContext.ToListAsync(periodKeysQuery, cancellationToken);
+    return periodKeys.ToHashSet();
   }
 
   private static StudentFeeConfigDto ToStudentFeeConfigDto(StudentFee studentFee)

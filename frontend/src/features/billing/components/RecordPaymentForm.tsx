@@ -16,9 +16,12 @@ type RecordPaymentFormProps = {
 };
 
 function toDateOnlyString(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
+  // Use UTC parts so the default/validation match the backend, which treats "today"
+  // as DateOnly.FromDateTime(DateTime.UtcNow). Local dates would otherwise be rejected
+  // as "in the future" in timezones ahead of UTC (e.g. UTC+6).
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
 

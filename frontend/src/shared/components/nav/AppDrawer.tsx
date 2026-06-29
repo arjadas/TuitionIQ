@@ -53,7 +53,29 @@ const NAV_ITEMS: NavItem[] = [
     icon: "receipt-outline",
     iconActive: "receipt",
     route: "/billing" as Href,
-    isActive: (pathname) => pathname.startsWith("/billing"),
+    isActive: (pathname) =>
+      pathname === "/billing" ||
+      (pathname.startsWith("/billing/") &&
+        !pathname.startsWith("/billing/tracker") &&
+        !pathname.startsWith("/billing/record")),
+    group: "navigate",
+  },
+  {
+    key: "payment-tracker",
+    label: "Payment Tracker",
+    icon: "calendar-outline",
+    iconActive: "calendar",
+    route: "/billing/tracker" as Href,
+    isActive: (pathname) => pathname.startsWith("/billing/tracker"),
+    group: "navigate",
+  },
+  {
+    key: "record-payment",
+    label: "Record Payment",
+    icon: "cash-outline",
+    iconActive: "cash",
+    route: "/billing/record" as Href,
+    isActive: (pathname) => pathname.startsWith("/billing/record"),
     group: "navigate",
   },
   {

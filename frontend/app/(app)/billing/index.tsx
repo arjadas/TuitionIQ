@@ -95,6 +95,25 @@ export default function OrgBillingScreen() {
           <Text style={styles.title}>Billing overview</Text>
         </View>
 
+        <View style={styles.quickActions}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.push("/billing/tracker" as Href)}
+            style={({ pressed }) => [styles.quickAction, pressed && styles.quickActionPressed]}
+          >
+            <Ionicons name="calendar-outline" size={18} color={colors.primary} />
+            <Text style={styles.quickActionText}>Payment Tracker</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.push("/billing/record" as Href)}
+            style={({ pressed }) => [styles.quickAction, styles.quickActionAccent, pressed && styles.quickActionPressed]}
+          >
+            <Ionicons name="cash-outline" size={18} color={colors.action} />
+            <Text style={[styles.quickActionText, styles.quickActionTextAccent]}>Record Payment</Text>
+          </Pressable>
+        </View>
+
         <Card>
           <View style={styles.monthRow}>
             <Pressable accessibilityLabel="Previous month" accessibilityRole="button" hitSlop={8} onPress={goToPrevMonth} style={styles.monthArrow}>
@@ -217,6 +236,37 @@ const styles = StyleSheet.create({
   },
   headerText: {
     gap: 2,
+  },
+  quickActions: {
+    flexDirection: "row",
+    gap: spacing.md,
+  },
+  quickAction: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.sm,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.borderMuted,
+    backgroundColor: colors.surface,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
+  },
+  quickActionAccent: {
+    borderColor: colors.successBg,
+  },
+  quickActionPressed: {
+    opacity: 0.75,
+  },
+  quickActionText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.primary,
+  },
+  quickActionTextAccent: {
+    color: colors.action,
   },
   kicker: {
     fontSize: 12,
