@@ -1,10 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
 import type { FeePeriodDto, RecordPaymentRequest, StudentSummaryDto } from "@tuitioniq/types";
 import { type Href, useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { WaivePeriodForm } from "@/src/features/billing/components/WaivePeriodForm";
 import { useFeeHistory } from "@/src/features/billing/hooks/useFeeHistory";
-import { useFeePeriods } from "@/src/features/billing/hooks/useFeePeriods";
+import { useFeePeriods, useWaivePeriod } from "@/src/features/billing/hooks/useFeePeriods";
 import { useRecordPayments } from "@/src/features/billing/hooks/useRecordPayments";
 import { isOutstandingStatus, periodMonthLabel, periodMonthShortLabel } from "@/src/features/billing/utils/feeStatus";
 import { StudentPicker } from "@/src/features/students/components/StudentPicker";
@@ -54,9 +55,14 @@ export default function PaymentSubmissionScreen() {
   const router = useRouter();
   const selectedOrgId = useOrgStore((state) => state.selectedOrgId);
 
-  const params = useLocalSearchParams<{ studentId?: string | string[]; studentName?: string | string[] }>();
+  const params = useLocalSearchParams<{
+    studentId?: string | string[];
+    studentName?: string | string[];
+    periodId?: string | string[];
+  }>();
   const routeStudentId = useMemo(() => resolveRouteParam(params.studentId), [params.studentId]);
   const routeStudentName = useMemo(() => resolveRouteParam(params.studentName), [params.studentName]);
+  const routePeriodId = useMemo(() => resolveRouteParam(params.periodId), [params.periodId]);
 
   const [student, setStudent] = useState<SelectedStudent | null>(
     routeStudentId ? { id: routeStudentId, name: routeStudentName ?? "Selected student" } : null,
@@ -71,8 +77,10 @@ export default function PaymentSubmissionScreen() {
   const feePeriodsQuery = useFeePeriods(student?.id ?? null);
   const feeHistoryQuery = useFeeHistory(student?.id ?? null);
   const recordPayments = useRecordPayments(student?.id ?? null);
+  const waivePeriod = useWaivePeriod(student?.id ?? null);
 
   const [selectedPeriodIds, setSelectedPeriodIds] = useState<string[]>([]);
+  const [waivingPeriod, setWaivingPeriod] = useState<FeePeriodDto | null>(null);
   const [amountText, setAmountText] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("Cash");
   const [paymentDate, setPaymentDate] = useState(toDateOnlyString(new Date()));
@@ -105,12 +113,41 @@ export default function PaymentSubmissionScreen() {
 
   const isScheduleReady = !feePeriodsQuery.isPending && !feePeriodsQuery.isError && hasPeriods;
 
+  // When arriving from a specific period (e.g. the billing detail screen), preselect
+  // that month for payment once its data is available and it is still outstanding.
+  const appliedPeriodRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!routePeriodId || !feePeriodsQuery.data) {
+      return;
+    }
+    if (appliedPeriodRef.current === routePeriodId) {
+      return;
+    }
+    const target = feePeriodsQuery.data.find((period) => period.id === routePeriodId);
+    if (target && isOutstandingStatus(target.status)) {
+      setSelectedPeriodIds([routePeriodId]);
+      appliedPeriodRef.current = routePeriodId;
+    }
+  }, [routePeriodId, feePeriodsQuery.data]);
+
   const resetStudent = (next: SelectedStudent | null): void => {
     setStudent(next);
     setSelectedPeriodIds([]);
+    setWaivingPeriod(null);
     setValidationError(null);
     setResultMessage(null);
+    appliedPeriodRef.current = null;
     recordPayments.reset();
+    waivePeriod.reset();
+  };
+
+  const submitWaive = async (waiverReason: string): Promise<void> => {
+    if (!waivingPeriod) {
+      return;
+    }
+
+    await waivePeriod.mutateAsync({ periodId: waivingPeriod.id, body: { waiverReason } });
+    setWaivingPeriod(null);
   };
 
   const togglePeriod = (periodId: string): void => {
@@ -305,34 +342,73 @@ export default function PaymentSubmissionScreen() {
                       period.periodYear === currentYear && period.periodMonth === currentMonth;
                     const balance = Math.max(period.fee - period.amountPaid, 0);
                     return (
-                      <Pressable
+                      <View
                         key={period.id}
-                        accessibilityRole="checkbox"
-                        accessibilityState={{ checked: isSelected }}
-                        onPress={() => togglePeriod(period.id)}
                         style={[styles.monthRow, isSelected && styles.monthRowSelected]}
                       >
-                        <Ionicons
-                          name={isSelected ? "checkbox" : "square-outline"}
-                          size={20}
-                          color={isSelected ? colors.primary : colors.textMuted}
-                        />
-                        <View style={styles.monthInfo}>
-                          <Text style={styles.monthName}>
-                            {periodMonthShortLabel(period.periodYear, period.periodMonth)}
-                            {isCurrent ? <Text style={styles.currentTag}>  • current</Text> : null}
-                          </Text>
-                          <Text style={styles.monthBalance}>
-                            {formatCurrency(balance, period.currency)} due
-                          </Text>
+                        <Pressable
+                          accessibilityRole="checkbox"
+                          accessibilityState={{ checked: isSelected }}
+                          onPress={() => togglePeriod(period.id)}
+                          style={styles.monthSelectArea}
+                        >
+                          <Ionicons
+                            name={isSelected ? "checkbox" : "square-outline"}
+                            size={20}
+                            color={isSelected ? colors.primary : colors.textMuted}
+                          />
+                          <View style={styles.monthInfo}>
+                            <Text style={styles.monthName}>
+                              {periodMonthShortLabel(period.periodYear, period.periodMonth)}
+                              {isCurrent ? <Text style={styles.currentTag}>  • current</Text> : null}
+                            </Text>
+                            <Text style={styles.monthBalance}>
+                              {formatCurrency(balance, period.currency)} due
+                            </Text>
+                          </View>
+                        </Pressable>
+
+                        <View style={styles.monthRight}>
+                          <PaymentStatusBadge status={period.status} />
+                          <Pressable
+                            accessibilityRole="button"
+                            onPress={() => {
+                              setSelectedPeriodIds((current) =>
+                                current.filter((id) => id !== period.id),
+                              );
+                              setResultMessage(null);
+                              setWaivingPeriod(period);
+                            }}
+                            style={styles.waiveLink}
+                          >
+                            <Text style={styles.waiveLinkText}>Waive</Text>
+                          </Pressable>
                         </View>
-                        <PaymentStatusBadge status={period.status} />
-                      </Pressable>
+                      </View>
                     );
                   })}
                 </View>
               ) : null}
             </Card>
+
+            {waivingPeriod ? (
+              <Card>
+                <Text style={styles.sectionTitle}>
+                  Waive {periodMonthLabel(waivingPeriod.periodYear, waivingPeriod.periodMonth)}
+                </Text>
+                <WaivePeriodForm
+                  errorMessage={
+                    waivePeriod.isError
+                      ? (getApiErrorMessage(waivePeriod.error) ?? "Could not waive period.")
+                      : null
+                  }
+                  isSubmitting={waivePeriod.isPending}
+                  onCancel={() => setWaivingPeriod(null)}
+                  onSubmit={submitWaive}
+                  periodLabel={periodMonthShortLabel(waivingPeriod.periodYear, waivingPeriod.periodMonth)}
+                />
+              </Card>
+            ) : null}
 
             {payablePeriods.length > 0 ? (
             <Card>
@@ -577,9 +653,34 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
     backgroundColor: colors.avatarBg,
   },
+  monthSelectArea: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+  },
+  monthRight: {
+    alignItems: "flex-end",
+    gap: 6,
+  },
   monthInfo: {
     flex: 1,
     gap: 2,
+  },
+  waiveLink: {
+    borderWidth: 1,
+    borderColor: colors.warning,
+    borderRadius: radius.md,
+    backgroundColor: colors.warningBg,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  waiveLinkText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.warningFg,
   },
   monthName: {
     fontSize: 14,

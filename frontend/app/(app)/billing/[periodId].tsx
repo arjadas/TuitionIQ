@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
-import type { FeePaymentDto, RecordPaymentRequest } from "@tuitioniq/types";
+import type { FeePaymentDto } from "@tuitioniq/types";
 import { type Href, useLocalSearchParams, useRouter } from "expo-router";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -13,9 +13,7 @@ import {
   View,
 } from "react-native";
 import { FeePeriodCard } from "@/src/features/billing/components/FeePeriodCard";
-import { RecordPaymentForm } from "@/src/features/billing/components/RecordPaymentForm";
-import { WaivePeriodForm } from "@/src/features/billing/components/WaivePeriodForm";
-import { useRecordPayment, useReversePayment, useWaivePeriod } from "@/src/features/billing/hooks/useFeePeriods";
+import { useReversePayment } from "@/src/features/billing/hooks/useFeePeriods";
 import { useOrgPeriod } from "@/src/features/billing/hooks/useOrgPeriod";
 import { usePayments } from "@/src/features/billing/hooks/usePayments";
 import { getApiErrorMessage } from "@/src/shared/utils/apiError";
@@ -23,8 +21,6 @@ import { formatCurrency } from "@/src/shared/utils/formatCurrency";
 import { resolveRouteParam } from "@/src/shared/utils/resolveRouteParam";
 import { colors, radius, spacing } from "@/src/shared/theme/tokens";
 import { useOrgStore } from "@/src/store/orgStore";
-
-const WAIVABLE_STATUSES = ["unpaid", "partial", "overdue"];
 
 function formatDate(value: string): string {
   const dateOnlyPattern = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -57,34 +53,13 @@ export default function FeePeriodDetailScreen() {
   const studentId = periodQuery.data?.studentId ?? null;
 
   const paymentsQuery = usePayments(periodId, studentId);
-  const recordPaymentMutation = useRecordPayment(studentId);
   const reversePaymentMutation = useReversePayment(studentId);
-  const waivePeriodMutation = useWaivePeriod(studentId);
-
-  const [showRecordForm, setShowRecordForm] = useState(false);
-  const [showWaiveForm, setShowWaiveForm] = useState(false);
 
   const refreshOrgBilling = async (): Promise<void> => {
     await periodQuery.refetch();
     if (selectedOrgId) {
       await queryClient.invalidateQueries({ queryKey: ["billing", "org-periods", selectedOrgId] });
     }
-  };
-
-  const submitRecordPayment = async (body: RecordPaymentRequest): Promise<void> => {
-    await recordPaymentMutation.mutateAsync(body);
-    setShowRecordForm(false);
-    await refreshOrgBilling();
-  };
-
-  const submitWaive = async (waiverReason: string): Promise<void> => {
-    if (!periodId) {
-      return;
-    }
-
-    await waivePeriodMutation.mutateAsync({ periodId, body: { waiverReason } });
-    setShowWaiveForm(false);
-    await refreshOrgBilling();
   };
 
   const confirmReverse = (paymentId: string): void => {
@@ -142,8 +117,6 @@ export default function FeePeriodDetailScreen() {
   }
 
   const period = periodQuery.data;
-  const periodLabel = `${period.periodYear}-${String(period.periodMonth).padStart(2, "0")}`;
-  const canWaive = WAIVABLE_STATUSES.includes(period.status.trim().toLowerCase());
 
   return (
     <SafeAreaView style={styles.container}>
@@ -160,66 +133,18 @@ export default function FeePeriodDetailScreen() {
 
         <FeePeriodCard period={period} selected />
 
-        <View style={styles.actionsRow}>
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => {
-              setShowRecordForm((open) => !open);
-              setShowWaiveForm(false);
-            }}
-            style={styles.primaryButton}
-          >
-            <Text style={styles.primaryButtonText}>{showRecordForm ? "Close" : "Record payment"}</Text>
-          </Pressable>
-          {canWaive ? (
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => {
-                setShowWaiveForm((open) => !open);
-                setShowRecordForm(false);
-              }}
-              style={styles.secondaryButton}
-            >
-              <Text style={styles.secondaryButtonText}>{showWaiveForm ? "Close" : "Waive"}</Text>
-            </Pressable>
-          ) : null}
-        </View>
-
-        {showRecordForm && studentId ? (
-          <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Record payment</Text>
-            <RecordPaymentForm
-              currency={period.currency}
-              errorMessage={
-                recordPaymentMutation.isError
-                  ? (getApiErrorMessage(recordPaymentMutation.error) ?? "Could not record payment.")
-                  : null
-              }
-              feePeriodId={period.id}
-              isSubmitting={recordPaymentMutation.isPending}
-              onCancel={() => setShowRecordForm(false)}
-              onSubmit={submitRecordPayment}
-              studentId={studentId}
-            />
-          </View>
-        ) : null}
-
-        {showWaiveForm ? (
-          <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Waive period</Text>
-            <WaivePeriodForm
-              errorMessage={
-                waivePeriodMutation.isError
-                  ? (getApiErrorMessage(waivePeriodMutation.error) ?? "Could not waive period.")
-                  : null
-              }
-              isSubmitting={waivePeriodMutation.isPending}
-              onCancel={() => setShowWaiveForm(false)}
-              onSubmit={submitWaive}
-              periodLabel={periodLabel}
-            />
-          </View>
-        ) : null}
+        <Pressable
+          accessibilityRole="button"
+          onPress={() =>
+            router.push({
+              pathname: "/billing/record",
+              params: { studentId: studentId ?? "", studentName: period.studentName, periodId: period.id },
+            } as Href)
+          }
+          style={styles.primaryButton}
+        >
+          <Text style={styles.primaryButtonText}>Record payment</Text>
+        </Pressable>
 
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Payments</Text>
@@ -302,10 +227,6 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "700",
     color: colors.textPrimary,
-  },
-  actionsRow: {
-    flexDirection: "row",
-    gap: 10,
   },
   card: {
     borderRadius: radius.lg,

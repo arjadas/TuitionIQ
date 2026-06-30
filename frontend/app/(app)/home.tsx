@@ -70,7 +70,7 @@ export default function HomeScreen() {
         {shouldShowOrgSelector ? (
           <Card>
             <Text style={styles.sectionTitle}>Choose your organisation</Text>
-            <Text style={styles.sectionBody}>Select where you want to work.</Text>
+            <Text style={styles.sectionBody}>Select where you want to work, or create a new one.</Text>
             <View style={styles.list}>
               {memberships.map((membership) => (
                 <OrgSelectorCard
@@ -81,6 +81,15 @@ export default function HomeScreen() {
                 />
               ))}
             </View>
+
+            <Pressable
+              accessibilityRole="button"
+              onPress={onCreateOrganization}
+              style={({ pressed }) => [styles.createOrgButton, pressed && styles.createOrgButtonPressed]}
+            >
+              <Ionicons name="add-circle-outline" size={20} color={colors.primary} />
+              <Text style={styles.createOrgText}>Create new organisation</Text>
+            </Pressable>
           </Card>
         ) : null}
 
@@ -174,6 +183,27 @@ const styles = StyleSheet.create({
   },
   list: {
     gap: spacing.sm,
+  },
+  createOrgButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+    paddingVertical: spacing.md,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderColor: colors.primary,
+    backgroundColor: colors.surfaceMuted,
+  },
+  createOrgButtonPressed: {
+    opacity: 0.75,
+  },
+  createOrgText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: colors.primary,
   },
   signOut: {
     flexDirection: "row",

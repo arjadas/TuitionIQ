@@ -257,30 +257,47 @@ export function AppDrawer({ variant }: { variant: DrawerVariant }) {
                 <Text style={styles.groupLabel}>{group.label}</Text>
               )}
               {items.map((item) => {
+                // Navigate + Configure sections are only usable once an organisation is
+                // selected; Support (e.g. Help) stays available so the user is never stuck.
+                const requiresOrg = item.group === "navigate" || item.group === "configure";
+                const locked = requiresOrg && !selectedOrgId;
                 const active = item.isActive(pathname);
                 const badgeValue = item.badge === "students" ? studentCount : null;
                 return (
                   <Pressable
                     key={item.key}
                     accessibilityRole="button"
+                    accessibilityState={{ disabled: locked, selected: active }}
+                    disabled={locked}
                     onPress={() => navigateTo(item.route)}
                     style={[
                       styles.navItem,
                       collapsed && styles.navItemCollapsed,
                       active && styles.navItemActive,
+                      locked && styles.navItemLocked,
                     ]}
                   >
                     <Ionicons
                       name={active ? item.iconActive : item.icon}
                       size={18}
-                      color={active ? colors.primary : colors.textSecondary}
+                      color={locked ? colors.textMuted : active ? colors.primary : colors.textSecondary}
                     />
                     {!collapsed ? (
-                      <Text numberOfLines={1} style={[styles.navLabel, active && styles.navLabelActive]}>
+                      <Text
+                        numberOfLines={1}
+                        style={[
+                          styles.navLabel,
+                          active && styles.navLabelActive,
+                          locked && styles.navLabelLocked,
+                        ]}
+                      >
                         {item.label}
                       </Text>
                     ) : null}
-                    {!collapsed && badgeValue !== null && badgeValue > 0 ? (
+                    {!collapsed && locked ? (
+                      <Ionicons name="lock-closed" size={13} color={colors.textMuted} />
+                    ) : null}
+                    {!collapsed && !locked && badgeValue !== null && badgeValue > 0 ? (
                       <View style={styles.navBadge}>
                         <Text style={styles.navBadgeText}>{badgeValue}</Text>
                       </View>
@@ -432,6 +449,9 @@ const styles = StyleSheet.create({
   navItemActive: {
     backgroundColor: colors.avatarBg,
   },
+  navItemLocked: {
+    opacity: 0.5,
+  },
   navLabel: {
     flex: 1,
     fontSize: 13,
@@ -440,6 +460,9 @@ const styles = StyleSheet.create({
   navLabelActive: {
     color: colors.primary,
     fontWeight: "600",
+  },
+  navLabelLocked: {
+    color: colors.textMuted,
   },
   navBadge: {
     minWidth: 20,
