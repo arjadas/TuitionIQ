@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import type { MembershipDto, UserProfileDto } from "@tuitioniq/types";
 import { type Href, useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useMemo } from "react";
 import { useOrgMemberships } from "@/src/features/organizations/hooks/useOrgMemberships";
 import { useCurrentUser, usersMeQueryKey } from "@/src/features/users/hooks/useCurrentUser";
 import { useOrgStore } from "@/src/store/orgStore";
@@ -9,6 +9,7 @@ import { useOrgStore } from "@/src/store/orgStore";
 type HomeScreenState = {
   currentUser: UserProfileDto | null;
   memberships: MembershipDto[];
+  selectedOrgId: string | null;
   isLoading: boolean;
   shouldShowProfileCompletion: boolean;
   shouldShowWelcome: boolean;
@@ -31,6 +32,7 @@ export function useHomeScreenState(): HomeScreenState {
   const router = useRouter();
   const queryClient = useQueryClient();
   const selectOrg = useOrgStore((state) => state.selectOrg);
+  const selectedOrgId = useOrgStore((state) => state.selectedOrgId);
 
   const userQuery = useCurrentUser();
 
@@ -48,22 +50,6 @@ export function useHomeScreenState(): HomeScreenState {
   });
 
   const memberships = useMemo(() => membershipsQuery.data ?? [], [membershipsQuery.data]);
-  const hasRedirectedToDashboard = useRef(false);
-
-  useEffect(() => {
-    if (hasRedirectedToDashboard.current) {
-      return;
-    }
-
-    if (!membershipsQuery.isSuccess || memberships.length !== 1) {
-      return;
-    }
-
-    const onlyMembership = memberships[0];
-    selectOrg(onlyMembership.organizationId);
-    hasRedirectedToDashboard.current = true;
-    router.replace("/dashboard" as Href);
-  }, [memberships, membershipsQuery.isSuccess, router, selectOrg]);
 
   const onProfileCompleted = useCallback(
     (profile: UserProfileDto) => {
@@ -72,6 +58,8 @@ export function useHomeScreenState(): HomeScreenState {
     [queryClient],
   );
 
+  // Per product requirement: never auto-select. The user always taps an org,
+  // even when they belong to exactly one.
   const onSelectOrg = useCallback(
     (membership: MembershipDto) => {
       selectOrg(membership.organizationId);
@@ -84,8 +72,7 @@ export function useHomeScreenState(): HomeScreenState {
     router.push("/organizations/create" as Href);
   }, [router]);
 
-  const isLoading =
-    userQuery.isPending || (!isProfileIncomplete && membershipsQuery.isPending && !hasRedirectedToDashboard.current);
+  const isLoading = userQuery.isPending || (!isProfileIncomplete && membershipsQuery.isPending);
 
   const errorMessage = userQuery.isError
     ? getErrorMessage(userQuery.error)
@@ -96,10 +83,11 @@ export function useHomeScreenState(): HomeScreenState {
   return {
     currentUser: userQuery.data ?? null,
     memberships,
+    selectedOrgId,
     isLoading,
     shouldShowProfileCompletion: isProfileIncomplete,
     shouldShowWelcome: membershipsQuery.isSuccess && memberships.length === 0,
-    shouldShowOrgSelector: membershipsQuery.isSuccess && memberships.length > 1,
+    shouldShowOrgSelector: membershipsQuery.isSuccess && memberships.length >= 1,
     errorMessage,
     onProfileCompleted,
     onSelectOrg,

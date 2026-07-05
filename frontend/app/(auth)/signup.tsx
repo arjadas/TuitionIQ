@@ -1,9 +1,7 @@
-import { useEmailVerification } from "@/src/features/auth/hooks/useEmailVerification";
 import { authService } from "@/src/features/auth/services/authService";
 import { PasswordInput } from "@/src/shared/components/ui/PasswordInput";
 import { PasswordStrengthMeter } from "@/src/shared/components/ui/PasswordStrengthMeter";
 import { validatePassword } from "@/src/shared/utils/passwordValidation";
-import { useAuthStore } from "@/src/store/authStore";
 import { type Href, useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import {
@@ -23,9 +21,6 @@ function isExistingUserError(message: string): boolean {
 
 export default function SignupScreen() {
   const router = useRouter();
-  const { refreshEmailVerificationStatus } = useEmailVerification();
-  const setSession = useAuthStore((state) => state.setSession);
-  const setUser = useAuthStore((state) => state.setUser);
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -71,7 +66,7 @@ export default function SignupScreen() {
     setIsSubmitting(true);
     setErrorMessage(null);
 
-    const { data, error } = await authService.signUp({
+    const { error } = await authService.signUp({
       firstName: trimmedFirstName,
       lastName: trimmedLastName,
       email: normalizedEmail,
@@ -90,19 +85,10 @@ export default function SignupScreen() {
       return;
     }
 
-    if (data.session) {
-      setSession(data.session);
-      setUser(data.session.user);
-    }
-
-    try {
-      const isVerified = await refreshEmailVerificationStatus();
-      router.replace((isVerified ? "/home" : "/(verify)/verify-email") as Href);
-    } catch {
-      router.replace("/(verify)/verify-email" as Href);
-    } finally {
-      setIsSubmitting(false);
-    }
+    // signUp() establishes a session (Supabase "Confirm email" is OFF). The
+    // onAuthStateChange listener publishes it with email_verified = FALSE, so the
+    // route guards route to /(verify)/verify-email. Keep the spinner up until that
+    // navigation unmounts this screen — navigation is guard-driven, exactly like login.
   };
 
   return (

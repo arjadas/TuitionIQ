@@ -1,22 +1,26 @@
-import { useAuthStore } from "@/src/store/authStore";
+import { AppShell } from "@/src/shared/components/nav/AppShell";
+import { AuthLoadingScreen } from "@/src/shared/components/ui/AuthLoadingScreen";
+import { useAuthStatus } from "@/src/store/authStore";
 import { Redirect, Stack, type Href } from "expo-router";
 
 export default function AppLayout() {
-  const isInitialised = useAuthStore((state) => state.isInitialised);
-  const session = useAuthStore((state) => state.session);
-  const emailVerified = useAuthStore((state) => state.emailVerified);
+  const status = useAuthStatus();
 
-  if (!isInitialised) {
-    return null;
+  if (status === "initializing") {
+    return <AuthLoadingScreen />;
   }
 
-  if (!session) {
+  if (status === "unauthenticated") {
     return <Redirect href="/(auth)/login" />;
   }
 
-  if (!emailVerified) {
+  if (status === "unverified") {
     return <Redirect href={"/(verify)/verify-email" as Href} />;
   }
 
-  return <Stack screenOptions={{ headerShown: false }} />;
+  return (
+    <AppShell>
+      <Stack screenOptions={{ headerShown: false }} />
+    </AppShell>
+  );
 }

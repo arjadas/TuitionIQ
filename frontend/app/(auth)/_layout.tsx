@@ -1,22 +1,30 @@
-import { useAuthStore } from "@/src/store/authStore";
-import { Redirect, Stack, type Href } from "expo-router";
+import { AuthLoadingScreen } from "@/src/shared/components/ui/AuthLoadingScreen";
+import { useAuthStatus } from "@/src/store/authStore";
+import { Redirect, Stack, useSegments, type Href } from "expo-router";
 
 export default function AuthLayout() {
-  const isInitialised = useAuthStore((state) => state.isInitialised);
-  const session = useAuthStore((state) => state.session);
-  const emailVerified = useAuthStore((state) => state.emailVerified);
+  const status = useAuthStatus();
+  const segments = useSegments();
+  const isResetPassword = segments[segments.length - 1] === "reset-password";
 
-  if (!isInitialised) {
-    return null;
+  if (status === "initializing") {
+    return <AuthLoadingScreen />;
   }
 
-  if (session && emailVerified) {
+  // The password-recovery screen runs with an active recovery session; let it
+  // render so the guard doesn't bounce the user away mid-reset.
+  if (isResetPassword) {
+    return <Stack screenOptions={{ headerShown: false }} />;
+  }
+
+  if (status === "authenticated") {
     return <Redirect href="/home" />;
   }
 
-  if (session && !emailVerified) {
+  if (status === "unverified") {
     return <Redirect href={"/(verify)/verify-email" as Href} />;
   }
 
+  // unauthenticated — show login / signup / forgot-password
   return <Stack screenOptions={{ headerShown: false }} />;
 }

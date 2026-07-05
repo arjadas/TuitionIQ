@@ -1,3 +1,4 @@
+import { useCallback } from "react";
 import { AxiosError } from "axios";
 import { authService } from "@/src/features/auth/services/authService";
 import { forceClientSignOut } from "@/src/lib/forceClientSignOut";
@@ -74,36 +75,38 @@ function getSessionEmail(email: string | null | undefined): string {
 export function useEmailVerification() {
   const setEmailVerified = useAuthStore((state) => state.setEmailVerified);
 
-  const getValidatedSession = async (): Promise<Awaited<ReturnType<typeof authService.getSession>>["data"]["session"]> => {
-    const {
-      data: { session },
-      error,
-    } = await authService.getSession();
+  const getValidatedSession = useCallback(
+    async (): Promise<Awaited<ReturnType<typeof authService.getSession>>["data"]["session"]> => {
+      const {
+        data: { session },
+        error,
+      } = await authService.getSession();
 
-    if (!error) {
-      return session;
-    }
+      if (!error) {
+        return session;
+      }
 
-    debugAuthVerification("supabase.getSession failed", { message: error.message });
+      debugAuthVerification("supabase.getSession failed", { message: error.message });
 
-    if (isInvalidRefreshTokenError(error.message)) {
-      await forceClientSignOut();
-      throw new Error("Your session expired. Please sign in again.");
-    }
+      if (isInvalidRefreshTokenError(error.message)) {
+        await forceClientSignOut();
+        throw new Error("Your session expired. Please sign in again.");
+      }
 
-    throw new Error(error.message || "Could not load your session.");
-  };
+      throw new Error(error.message || "Could not load your session.");
+    },
+    [],
+  );
 
-  const getActiveSessionEmail = async (): Promise<string> => {
+  // Resolve which email to verify. Model B always has a session after signUp()
+  // or signInWithPassword() (Supabase "Confirm email" is OFF), so the email comes
+  // from the session user; getSessionEmail throws if somehow signed out.
+  const resolveVerificationEmail = useCallback(async (): Promise<string> => {
     const session = await getValidatedSession();
-    const storeSessionEmail = useAuthStore.getState().session?.user?.email;
+    return getSessionEmail(session?.user?.email);
+  }, [getValidatedSession]);
 
-    const email = getSessionEmail(session?.user?.email ?? storeSessionEmail);
-    debugAuthVerification("resolved active session email", { email });
-    return email;
-  };
-
-  const refreshEmailVerificationStatus = async (): Promise<boolean> => {
+  const refreshEmailVerificationStatus = useCallback(async (): Promise<boolean> => {
     const session = await getValidatedSession();
 
     if (!session) {
@@ -127,8 +130,7 @@ export function useEmailVerification() {
 
       const errorMessage = getVerificationErrorMessage(error, "Could not load your profile.");
       debugAuthVerification("failed to refresh email verification status", { message: errorMessage });
-      
-      // Log the full error details for debugging
+
       if (error instanceof AxiosError && __DEV__) {
         console.error("[auth/verification] API error:", {
           status: error.response?.status,
@@ -137,61 +139,63 @@ export function useEmailVerification() {
           url: error.config?.url,
         });
       }
-      
+
       throw new Error(errorMessage);
     }
-  };
+  }, [getValidatedSession, setEmailVerified]);
 
-  const sendVerificationOtp = async (): Promise<void> => {
-    const email = await getActiveSessionEmail();
+  const sendVerificationOtp = useCallback(async (): Promise<void> => {
+    const email = await resolveVerificationEmail();
     debugAuthVerification("sending verification OTP", { email });
-    const { error } = await authService.sendVerificationOtp(email);
 
+    const { error } = await authService.sendVerificationOtp(email);
     if (error) {
       debugAuthVerification("sendVerificationOtp failed", { message: error.message });
       throw new Error(error.message || "Could not send the verification code.");
     }
 
     debugAuthVerification("verification OTP sent");
-  };
+  }, [resolveVerificationEmail]);
 
-  const verifyEmailOtp = async (otpCode: string): Promise<void> => {
-    const email = await getActiveSessionEmail();
-    const token = otpCode.trim();
+  const verifyEmailOtp = useCallback(
+    async (otpCode: string): Promise<void> => {
+      const email = await resolveVerificationEmail();
+      const token = otpCode.trim();
 
-    if (token.length !== 6) {
-      throw new Error("Enter the 6-digit verification code.");
-    }
-
-    debugAuthVerification("verifying OTP", { email });
-    const { error: otpError } = await authService.verifyEmailOtp(email, token);
-    if (otpError) {
-      debugAuthVerification("verifyEmailOtp failed", { message: otpError.message });
-      throw new Error(otpError.message || "The code is invalid or expired.");
-    }
-
-    const { error: refreshError } = await authService.getSession();
-    if (refreshError) {
-      debugAuthVerification("session refresh after OTP failed", { message: refreshError.message });
-      throw new Error(refreshError.message || "Could not refresh your session.");
-    }
-
-    const isAlreadyVerified = await refreshEmailVerificationStatus();
-    if (!isAlreadyVerified) {
-      try {
-        debugAuthVerification("calling PATCH /api/users/email-verification");
-        await usersApiClient.markEmailVerified();
-        debugAuthVerification("email verification marked in backend");
-      } catch (error) {
-        const message = getVerificationErrorMessage(error, "Could not complete email verification.");
-        debugAuthVerification("markEmailVerified failed", { message });
-        throw new Error(message);
+      if (token.length !== 6) {
+        throw new Error("Enter the 6-digit verification code.");
       }
-    }
 
-    setEmailVerified(true);
-    debugAuthVerification("email verification flow completed");
-  };
+      debugAuthVerification("verifying OTP", { email });
+
+      const { error: otpError } = await authService.verifyEmailOtp(email, token);
+      if (otpError) {
+        debugAuthVerification("verifyEmailOtp failed", { message: otpError.message });
+        throw new Error(otpError.message || "The code is invalid or expired.");
+      }
+
+      // Persist the authoritative flag + audit log via the C# API. verifyOtp(type:'email')
+      // reuses the existing session (it does not emit a fresh SIGNED_IN), so this
+      // screen's flow is the SOLE writer of emailVerified=true — no listener races it.
+      const isAlreadyVerified = await refreshEmailVerificationStatus();
+      if (!isAlreadyVerified) {
+        try {
+          debugAuthVerification("calling PATCH /api/users/email-verification");
+          await usersApiClient.markEmailVerified();
+          debugAuthVerification("email verification marked in backend");
+        } catch (error) {
+          const message = getVerificationErrorMessage(error, "Could not complete email verification.");
+          debugAuthVerification("markEmailVerified failed", { message });
+          throw new Error(message);
+        }
+      }
+
+      // Flip the single source of truth; the status guards navigate to /home.
+      setEmailVerified(true);
+      debugAuthVerification("email verification flow completed");
+    },
+    [resolveVerificationEmail, refreshEmailVerificationStatus, setEmailVerified],
+  );
 
   return {
     refreshEmailVerificationStatus,

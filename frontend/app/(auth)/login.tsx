@@ -1,7 +1,5 @@
-import { useEmailVerification } from "@/src/features/auth/hooks/useEmailVerification";
 import { authService } from "@/src/features/auth/services/authService";
 import { PasswordInput } from "@/src/shared/components/ui/PasswordInput";
-import { useAuthStore } from "@/src/store/authStore";
 import { type Href, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, SafeAreaView, StyleSheet, Text, TextInput, View } from "react-native";
@@ -13,9 +11,6 @@ function isInvalidCredentialsError(message: string): boolean {
 export default function LoginScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ email?: string; message?: string}>();
-  const { refreshEmailVerificationStatus } = useEmailVerification();
-  const setSession = useAuthStore((state) => state.setSession);
-  const setUser = useAuthStore((state) => state.setUser);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -56,7 +51,7 @@ export default function LoginScreen() {
     setIsSubmitting(true);
     setErrorMessage(null);
 
-    const { data, error } = await authService.signInWithPassword(normalizedEmail, password);
+    const { error } = await authService.signInWithPassword(normalizedEmail, password);
 
     if (error) {
       if (isInvalidCredentialsError(error.message)) {
@@ -70,23 +65,12 @@ export default function LoginScreen() {
       return;
     }
 
-    if (data.session) {
-      setSession(data.session);
-      setUser(data.session.user);
-    }
-
     setFailedAttempts(0);
 
-    try {
-      const isVerified = await refreshEmailVerificationStatus();
-      router.replace((isVerified ? "/home" : "/(verify)/verify-email") as Href);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Could not verify your email. Try again or restart the app.";
-      console.error("[auth/login] Email verification check failed:", errorMessage);
-      setErrorMessage(errorMessage);
-      setIsSubmitting(false);
-      return;
-    }
+    // On success, the onAuthStateChange listener captures the session and the
+    // route guards navigate based on the resolved auth status (verified -> /home,
+    // unverified -> /(verify)/verify-email). Keep the spinner up until this
+    // screen is unmounted by that navigation.
   };
 
   return (

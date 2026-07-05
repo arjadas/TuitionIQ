@@ -1,0 +1,146 @@
+
+<h2 class="sr-only">TuitionIQ screen inventory — 32 screens and states across 10 categories, filterable by flow.</h2>
+
+<div style="padding:1rem 0;">
+
+<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:1.25rem;">
+  <div>
+    <p style="font-size:11px;color:var(--color-text-tertiary);margin:0 0 3px;text-transform:uppercase;letter-spacing:0.08em;">Screen inventory</p>
+    <p style="font-size:20px;font-weight:500;color:var(--color-text-primary);margin:0;">TuitionIQ — all screens &amp; states</p>
+  </div>
+  <div style="text-align:right;">
+    <p style="font-size:28px;font-weight:500;color:var(--color-text-primary);margin:0;line-height:1;" id="count-num">32</p>
+    <p style="font-size:11px;color:var(--color-text-tertiary);margin:2px 0 0;">designs needed</p>
+  </div>
+</div>
+
+<div id="filter-row" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:1rem;"></div>
+
+<div id="legend-row" style="display:flex;flex-wrap:wrap;gap:12px;padding:8px 12px;background:var(--color-background-secondary);border-radius:var(--border-radius-md);margin-bottom:1rem;font-size:11px;color:var(--color-text-secondary);"></div>
+
+<div id="screen-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(295px,1fr));gap:8px;"></div>
+
+</div>
+
+<script>
+const S=[
+  {id:1,name:"Auth loading / redirect",route:"/",cat:"auth",st:"current",tp:"screen",notes:"Initialises auth; prevents half-resolved state flash. Route guards read authStatus and never act while initializing.",chips:["isInitializingAuth gate","onAuthStateChange","authStatus = initializing"]},
+  {id:2,name:"Login",route:"/auth/login",cat:"auth",st:"current",tp:"screen",notes:"Email + password. Generic error — never indicate which field failed. 'Forgot password?' appears prominently after 5 failures.",chips:["LoginForm","PasswordInput (show/hide)","signInWithPassword()"]},
+  {id:3,name:"Sign up",route:"/auth/signup",cat:"auth",st:"current",tp:"screen",notes:"First name, last name, email, password, confirm. Client-side PASSWORD_REGEX validated before signUp(). Success → OTP verify.",chips:["SignUpForm","PasswordStrengthMeter","PASSWORD_REGEX"]},
+  {id:4,name:"Forgot password",route:"/auth/forgot-password",cat:"auth",st:"current",tp:"screen",notes:"Email only. Always shows 'If an account exists, a reset link has been sent.' 60s resend cooldown. No enumeration.",chips:["ForgotPasswordForm","60s cooldown","resetPasswordForEmail()"]},
+  {id:5,name:"Reset password",route:"/auth/reset-password",cat:"auth",st:"current",tp:"screen",notes:"Reads PKCE code from URL, strips immediately. Exchanges for recovery session. New password + confirm → signOut() on success.",chips:["ResetPasswordForm","PasswordStrengthMeter","exchangeCodeForSession()"]},
+  {id:6,name:"Email OTP verification",route:"/verify/verify-email",cat:"verify",st:"current",tp:"screen",notes:"6-digit code. Non-bypassable, non-dismissable. 60s resend. 'Check spam' guidance. 'Use a different account' link. Calls PATCH /api/users/email-verification on success.",chips:["EmailOtpVerificationForm","signInWithOtp()","verifyOtp()","useEmailVerification"]},
+  {id:7,name:"Home — org selector",route:"/home",cat:"onboard",st:"current",tp:"screen",notes:"1+ memberships: ALWAYS show the selector. Never auto-select even for a single org. Tap card → store orgId → route by role → /dashboard.",chips:["OrgSelector","MembershipCard list","orgStore"]},
+  {id:8,name:"Home — no org welcome",route:"/home",cat:"onboard",st:"current",tp:"screen",notes:"0 memberships. 'Welcome to TuitionIQ.' Create organisation is the only CTA in the current build. No pending invite CTA.",chips:["Empty welcome state","Create organisation CTA"]},
+  {id:9,name:"Create organisation",route:"/home (modal)",cat:"onboard",st:"current",tp:"modal",notes:"Org name + slug (auto-derived). Creator becomes owner automatically. Inserts org + org_members row with role='owner'.",chips:["CreateOrgForm","Slug preview","POST /api/organizations"]},
+  {id:10,name:"Invite acceptance — sign up state",route:"/join?token=…",cat:"invite",st:"current",tp:"screen",notes:"New user. Email pre-filled, read-only. Token stripped from URL on mount → React state only. Never localStorage or SecureStore.",chips:["SignUpForm (email locked)","PasswordStrengthMeter","useInviteFlow"]},
+  {id:11,name:"Invite acceptance — login state",route:"/join?token=…",cat:"invite",st:"current",tp:"screen",notes:"Existing user. Email pre-filled, read-only. Token stays in React state through sign-in. OTP verify runs if email_verified = FALSE.",chips:["LoginForm (email locked)","useInviteFlow","OTP verify if needed"]},
+  {id:12,name:"Teacher dashboard",route:"/dashboard",cat:"teacher",st:"current",tp:"screen",notes:"Overview: students, payments due this month, recent payment activity. Role-guarded. Requires session + email_verified + selected org.",chips:["Stats cards","Payments due list","Recent activity feed"]},
+  {id:13,name:"Student list",route:"/students",cat:"teacher",st:"current",tp:"screen",notes:"Paginated; filterable by student status and account_status. Search by name. InviteStatusBadge on each row.",chips:["StudentList","StudentCard","InviteStatusBadge","Status filter"]},
+  {id:14,name:"Create student",route:"/students/new",cat:"teacher",st:"current",tp:"screen",notes:"First name, last name, email (invite target), phone, notes, status. Creates students row + audit_log in one transaction.",chips:["StudentForm","POST /api/organizations/{orgId}/students"]},
+  {id:15,name:"Student detail / profile",route:"/students/[id]",cat:"teacher",st:"current",tp:"screen",notes:"Profile + current fee config + account_status. Edit inline. Entry point to fee periods and payment history tabs.",chips:["StudentForm (edit mode)","StudentFeeConfigDto","account_status badge","Tab nav"]},
+  {id:16,name:"Student fee periods",route:"/students/[id]/periods",cat:"teacher",st:"current",tp:"screen",notes:"Monthly billing periods list. Status: unpaid / partial / paid / overdue / waived. Tap row → period detail. Waive action available.",chips:["FeePeriodList","FeePeriodCard","Status badge","Waive period action"]},
+  {id:17,name:"Student payment history",route:"/students/[id]/payments",cat:"teacher",st:"current",tp:"screen",notes:"All payments for this student, newest first. Record new payment. Soft-delete (reverse) a wrong entry. Amount + method + date + reference.",chips:["FeePaymentDto list","RecordPaymentForm","Reverse payment action"]},
+  {id:18,name:"Org billing dashboard",route:"/billing",cat:"billing",st:"current",tp:"screen",notes:"Org-wide billing view across all students by month. Filter by period status. Total collected vs outstanding summary.",chips:["Month selector","FeePeriodList (all students)","Status filter","Totals summary"]},
+  {id:19,name:"Fee period detail",route:"/billing/[periodId]",cat:"billing",st:"current",tp:"screen",notes:"Single period: fee owed, amount paid, balance, all payment events. Actions: record payment, reverse payment, waive period.",chips:["FeePeriodCard (expanded)","FeePaymentDto list","RecordPaymentForm"]},
+  {id:20,name:"Organisation settings",route:"/settings",cat:"settings",st:"current",tp:"screen",notes:"Org name, slug, plan info, org-level settings JSONB. Future: member list, invite team members.",chips:["OrgSettingsForm","PATCH /api/organizations/{id}"]},
+  {id:21,name:"User profile",route:"/settings/profile",cat:"settings",st:"current",tp:"screen",notes:"Name, phone, avatar. 'Change password' → forgot-password flow. Sign out (this device). 'Sign out everywhere' — required in the UI, not just dev tooling.",chips:["UpdateProfileRequest form","AvatarUpload","signOut({ scope: 'global' })"]},
+  {id:22,name:"Record payment",route:"Modal — student payments or period detail",cat:"modals",st:"current",tp:"modal",notes:"Amount (whole integer > 0), payment date, method (cash/transfer/card/cheque/other), reference, notes.",chips:["RecordPaymentForm","PaymentMethodSelect","DatePicker","POST /api/payments"]},
+  {id:23,name:"Set / update student fee",route:"Modal — student detail",cat:"modals",st:"current",tp:"modal",notes:"Monthly fee (whole integer), currency, effective date, fee_source. Closes old fee row and inserts new one in a single transaction.",chips:["SetFeeForm","SetFeeRequest DTO","Currency selector"]},
+  {id:24,name:"Waive fee period",route:"Modal — period detail or fee periods list",cat:"modals",st:"current",tp:"modal",notes:"Requires waiver_reason text. Two-step confirmation. Sets status='waived'. This status is never overwritten by the auto-sync trigger.",chips:["Reason textarea","Confirmation step","PATCH .../periods/{id}/waive"]},
+  {id:25,name:"Send invite",route:"Modal — student detail or student list",cat:"modals",st:"current",tp:"modal",notes:"Shows teacher-held email. POST /api/invites triggers email lookup: may result in immediate linking or a pending token. Show result state.",chips:["Email confirmation","POST /api/invites","account_status feedback"]},
+  {id:26,name:"Org switcher",route:"Modal — persistent across all authenticated screens",cat:"modals",st:"current",tp:"modal",notes:"Lists all org memberships with role labels. Tap to switch. Updates orgStore. Web: org context stored in sessionStorage.",chips:["OrgSelector modal","orgStore","Membership list"]},
+  {id:27,name:"Sign out everywhere — confirmation",route:"Dialog — user profile",cat:"modals",st:"current",tp:"modal",notes:"Destructive action. Calls signOut({ scope: 'global' }). Spec requires this to be a real accessible feature, not hidden in developer tooling.",chips:["Confirmation dialog","signOut({ scope: 'global' })"]},
+  {id:28,name:"Reverse payment — confirmation",route:"Dialog — payment history or period detail",cat:"modals",st:"current",tp:"modal",notes:"Soft-deletes the payment. Trigger recalculates period totals and status. Clear irreversible-action warning.",chips:["Confirmation dialog","DELETE /api/payments/{id}","Period status recalc"]},
+  {id:29,name:"Delete student — confirmation",route:"Dialog — student detail or student list",cat:"modals",st:"current",tp:"modal",notes:"Soft-deletes student. Child records cascade. Clear warning listing what will be affected. Audit log entry created.",chips:["Confirmation dialog","DELETE /api/.../students/{id}"]},
+  {id:30,name:"Student portal",route:"/student-portal",cat:"student",st:"future",tp:"screen",notes:"Student's read-only view of their fee periods and payment status per org. Role-guarded for role='student'. Not built in the current build.",chips:["FeePeriodList (read-only)","Payment status","Role guard: student"]},
+  {id:31,name:"Auth initialising screen",route:"Full-screen overlay — authStatus = 'initializing'",cat:"system",st:"current",tp:"system",notes:"Shown while isInitializingAuth = true and email_verified is still resolving. Prevents redirect races. No interactive elements.",chips:["LoadingSpinner","isInitializingAuth gate"]},
+  {id:32,name:"Account suspended state",route:"Full-screen error — 403 + ACCOUNT_SUSPENDED",cat:"system",st:"current",tp:"system",notes:"Triggered when C# middleware returns 403 with is_active = false. Forces sign-out. Contact support CTA.",chips:["Error state","Sign out action","Support CTA"]}
+];
+
+const CATS=[
+  {id:"all",label:"All",icon:"ti-layout-grid",accent:"#444441",desc:""},
+  {id:"auth",label:"Auth flow",icon:"ti-lock",accent:"#534AB7"},
+  {id:"verify",label:"Verification",icon:"ti-mail-check",accent:"#185FA5"},
+  {id:"onboard",label:"Onboarding",icon:"ti-rocket",accent:"#0F6E56"},
+  {id:"invite",label:"Invite flow",icon:"ti-user-plus",accent:"#1D9E75"},
+  {id:"teacher",label:"Teacher views",icon:"ti-book-2",accent:"#185FA5"},
+  {id:"billing",label:"Billing",icon:"ti-coin",accent:"#854F0B"},
+  {id:"settings",label:"Settings",icon:"ti-adjustments-horizontal",accent:"#5F5E5A"},
+  {id:"modals",label:"Modals & dialogs",icon:"ti-layout-bottombar",accent:"#3C3489"},
+  {id:"student",label:"Student portal",icon:"ti-school",accent:"#27500A"},
+  {id:"system",label:"System states",icon:"ti-alert-circle",accent:"#A32D2D"}
+];
+
+const TYPE={
+  screen:{label:"Screen",bg:"var(--color-background-info)",fg:"var(--color-text-info)"},
+  modal:{label:"Modal / dialog",bg:"var(--color-background-secondary)",fg:"var(--color-text-secondary)"},
+  system:{label:"System state",bg:"var(--color-background-danger)",fg:"var(--color-text-danger)"}
+};
+const STATUS={
+  current:{label:"Current build",bg:"var(--color-background-success)",fg:"var(--color-text-success)"},
+  future:{label:"Future",bg:"var(--color-background-warning)",fg:"var(--color-text-warning)"}
+};
+
+const catMap={};
+CATS.forEach(c=>catMap[c.id]=c);
+const countByCat={};
+S.forEach(s=>{ countByCat[s.cat]=(countByCat[s.cat]||0)+1; });
+
+let active="all";
+
+function pill(text,bg,fg,extra=""){
+  return `<span style="display:inline-block;font-size:10px;font-weight:500;padding:2px 7px;border-radius:999px;background:${bg};color:${fg};${extra}">${text}</span>`;
+}
+
+function renderFilters(){
+  const row=document.getElementById("filter-row");
+  row.innerHTML=CATS.map(c=>{
+    const cnt=c.id==="all"?S.length:(countByCat[c.id]||0);
+    const on=active===c.id;
+    return `<button onclick="setFilter('${c.id}')" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:999px;border:0.5px solid ${on?c.accent:"var(--color-border-secondary)"};background:${on?c.accent:"var(--color-background-primary)"};color:${on?"#fff":"var(--color-text-secondary)"};font-size:12px;cursor:pointer;white-space:nowrap;" aria-pressed="${on}"><i class="ti ${c.icon}" aria-hidden="true" style="font-size:13px;"></i>${c.label}<span style="opacity:0.7;">${cnt}</span></button>`;
+  }).join("");
+}
+
+function renderLegend(){
+  const leg=document.getElementById("legend-row");
+  const items=[
+    {dot:"var(--color-background-info)",label:"Screen"},
+    {dot:"var(--color-background-secondary)",label:"Modal / dialog"},
+    {dot:"var(--color-background-danger)",label:"System state"},
+    {dot:"var(--color-background-success)",label:"Current build"},
+    {dot:"var(--color-background-warning)",label:"Future (not yet built)"}
+  ];
+  leg.innerHTML=items.map(i=>`<span style="display:inline-flex;align-items:center;gap:5px;"><span style="width:9px;height:9px;border-radius:50%;background:${i.dot};border:0.5px solid var(--color-border-secondary);flex-shrink:0;"></span>${i.label}</span>`).join("");
+}
+
+function renderCards(){
+  const grid=document.getElementById("screen-grid");
+  const vis=active==="all"?S:S.filter(s=>s.cat===active);
+  document.getElementById("count-num").textContent=vis.length;
+  grid.innerHTML=vis.map(s=>{
+    const cat=catMap[s.cat];
+    const ty=TYPE[s.tp];
+    const st=STATUS[s.st];
+    const chips=s.chips.map(c=>`<span style="font-size:10px;padding:2px 6px;border-radius:4px;background:var(--color-background-secondary);color:var(--color-text-secondary);font-family:var(--font-mono);white-space:nowrap;">${c}</span>`).join("");
+    return `<div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-left:3px solid ${cat.accent};border-radius:0 var(--border-radius-lg) var(--border-radius-lg) 0;padding:12px 14px;display:flex;flex-direction:column;gap:7px;">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:6px;">
+        <div style="display:flex;align-items:center;gap:7px;">
+          <span style="font-size:10px;font-weight:500;color:${cat.accent};background:${cat.accent}18;border-radius:4px;padding:1px 5px;flex-shrink:0;min-width:20px;text-align:center;">${s.id}</span>
+          <span style="font-size:13px;font-weight:500;color:var(--color-text-primary);line-height:1.3;">${s.name}</span>
+        </div>
+      </div>
+      <p style="font-size:10px;font-family:var(--font-mono);color:var(--color-text-tertiary);margin:0;padding-left:27px;">${s.route}</p>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;padding-left:27px;">${pill(ty.label,ty.bg,ty.fg)}${pill(st.label,st.bg,st.fg)}</div>
+      <p style="font-size:12px;color:var(--color-text-secondary);margin:0;line-height:1.5;padding-left:27px;">${s.notes}</p>
+      <div style="display:flex;flex-wrap:wrap;gap:3px;padding-left:27px;">${chips}</div>
+    </div>`;
+  }).join("");
+}
+
+function setFilter(id){ active=id; renderFilters(); renderCards(); }
+
+renderFilters();
+renderLegend();
+renderCards();
+</script>

@@ -1,22 +1,17 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { UpdateOrganizationRequest } from "@tuitioniq/types";
+import { Ionicons } from "@expo/vector-icons";
+import { useQuery } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 import { type Href, useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  SafeAreaView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
-import {
-  organizationsMembershipsQueryKey,
-  useOrgMemberships,
-} from "@/src/features/organizations/hooks/useOrgMemberships";
+import { useEffect, useMemo } from "react";
+import { ActivityIndicator, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useOrgMemberships } from "@/src/features/organizations/hooks/useOrgMemberships";
 import { organizationsApiClient } from "@/src/features/organizations/services/organizationsApiClient";
+import { OrgStudentsCard } from "@/src/features/students/components/OrgStudentsCard";
+import { Avatar } from "@/src/shared/components/ui/Avatar";
+import { Button } from "@/src/shared/components/ui/Button";
+import { Card } from "@/src/shared/components/ui/Card";
+import { RoleBadge } from "@/src/shared/components/ui/RoleBadge";
+import { colors, spacing } from "@/src/shared/theme/tokens";
 import { useOrgStore } from "@/src/store/orgStore";
 
 const organizationDetailsQueryKey = (organizationId: string | null) =>
@@ -56,31 +51,18 @@ function formatDate(value: string): string {
 
 export default function DashboardScreen() {
   const router = useRouter();
-  const queryClient = useQueryClient();
   const selectedOrgId = useOrgStore((state) => state.selectedOrgId);
-  const selectOrg = useOrgStore((state) => state.selectOrg);
-  const setMemberships = useOrgStore((state) => state.setMemberships);
 
   const membershipsQuery = useOrgMemberships();
   const memberships = useMemo(() => membershipsQuery.data ?? [], [membershipsQuery.data]);
 
-  const [name, setName] = useState("");
-  const [validationError, setValidationError] = useState<string | null>(null);
-
+  // Never auto-select. If no org has been chosen (e.g. native restart cleared the
+  // in-memory selection), send the user back to the selector to pick one.
   useEffect(() => {
-    if (!membershipsQuery.isSuccess || selectedOrgId) {
-      return;
-    }
-
-    if (memberships.length === 1) {
-      selectOrg(memberships[0].organizationId);
-      return;
-    }
-
-    if (memberships.length > 1) {
+    if (membershipsQuery.isSuccess && !selectedOrgId) {
       router.replace("/home" as Href);
     }
-  }, [memberships, membershipsQuery.isSuccess, router, selectOrg, selectedOrgId]);
+  }, [membershipsQuery.isSuccess, router, selectedOrgId]);
 
   const selectedMembership = useMemo(() => {
     if (!selectedOrgId) {
@@ -96,190 +78,111 @@ export default function DashboardScreen() {
     enabled: Boolean(selectedOrgId),
   });
 
-  useEffect(() => {
-    if (organizationQuery.data) {
-      setName(organizationQuery.data.name);
-    }
-  }, [organizationQuery.data]);
-
-  const updateMutation = useMutation({
-    mutationFn: async (payload: UpdateOrganizationRequest) => {
-      if (!selectedOrgId) {
-        throw new Error("No organization is selected.");
-      }
-
-      return organizationsApiClient.updateOrg(selectedOrgId, payload);
-    },
-    onSuccess: async (organization) => {
-      queryClient.setQueryData(organizationDetailsQueryKey(organization.id), organization);
-
-      const refreshedMemberships = await organizationsApiClient.getMyMemberships();
-      setMemberships(refreshedMemberships);
-      queryClient.setQueryData(organizationsMembershipsQueryKey, refreshedMemberships);
-
-      await queryClient.invalidateQueries({
-        queryKey: organizationsMembershipsQueryKey,
-      });
-
-      setValidationError(null);
-    },
-  });
-
-  const canSubmit = useMemo(() => {
-    const trimmedName = name.trim();
-    const currentName = organizationQuery.data?.name ?? "";
-
-    return (
-      trimmedName.length > 0
-      && trimmedName.length <= 255
-      && trimmedName !== currentName
-      && !updateMutation.isPending
-    );
-  }, [name, organizationQuery.data?.name, updateMutation.isPending]);
-
-  const submit = async (): Promise<void> => {
-    const trimmedName = name.trim();
-
-    if (!selectedOrgId) {
-      setValidationError("Select an organization before updating.");
-      return;
-    }
-
-    if (trimmedName.length === 0) {
-      setValidationError("Organization name is required.");
-      return;
-    }
-
-    if (trimmedName.length > 255) {
-      setValidationError("Organization name must be 255 characters or fewer.");
-      return;
-    }
-
-    setValidationError(null);
-    await updateMutation.mutateAsync({ name: trimmedName });
+  const goToSelector = (): void => {
+    router.replace("/home" as Href);
   };
 
   const isLoading = membershipsQuery.isPending || (Boolean(selectedOrgId) && organizationQuery.isPending);
 
   if (isLoading) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.card}>
-          <ActivityIndicator color="#1d4ed8" size="large" />
-          <Text style={styles.subtitle}>Loading organization details...</Text>
-        </View>
+      <SafeAreaView style={styles.centered}>
+        <ActivityIndicator color={colors.primary} size="large" />
+        <Text style={styles.mutedText}>Loading organization...</Text>
       </SafeAreaView>
     );
   }
 
   if (membershipsQuery.isError) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.card}>
+      <SafeAreaView style={styles.centered}>
+        <Card style={styles.fullWidthCard}>
           <Text style={styles.title}>Dashboard</Text>
           <Text style={styles.errorText}>
             {getErrorMessage(membershipsQuery.error, "Could not load memberships.")}
           </Text>
-        </View>
+        </Card>
       </SafeAreaView>
     );
   }
 
-  if (membershipsQuery.isSuccess && memberships.length === 0) {
+  if (!selectedOrgId || !organizationQuery.data || organizationQuery.isError) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.card}>
+      <SafeAreaView style={styles.centered}>
+        <Card style={styles.fullWidthCard}>
           <Text style={styles.title}>Dashboard</Text>
-          <Text style={styles.subtitle}>You do not have an organization yet.</Text>
-          <Pressable
-            onPress={() => {
-              router.push("/organizations/create" as Href);
-            }}
-            style={styles.primaryButton}
-          >
-            <Text style={styles.primaryButtonText}>Create organization</Text>
-          </Pressable>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  if (!selectedOrgId) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.card}>
-          <Text style={styles.title}>Dashboard</Text>
-          <Text style={styles.subtitle}>Select an organization to continue.</Text>
-          <Pressable
-            onPress={() => {
-              router.replace("/home" as Href);
-            }}
-            style={styles.primaryButton}
-          >
-            <Text style={styles.primaryButtonText}>Go to home</Text>
-          </Pressable>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  if (organizationQuery.isError || !organizationQuery.data) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.card}>
-          <Text style={styles.title}>Dashboard</Text>
-          <Text style={styles.errorText}>
-            {getErrorMessage(organizationQuery.error, "Could not load organization details.")}
+          <Text style={styles.mutedText}>
+            {organizationQuery.isError
+              ? getErrorMessage(organizationQuery.error, "Could not load organization details.")
+              : "Choose an organisation to continue."}
           </Text>
-        </View>
+          <Button label="Go to organisations" onPress={goToSelector} />
+        </Card>
       </SafeAreaView>
     );
   }
+
+  const organization = organizationQuery.data;
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.card}>
-        <Text style={styles.title}>Dashboard</Text>
-        <Text style={styles.subtitle}>Selected organization: {organizationQuery.data.name}</Text>
-
-        <View style={styles.metaList}>
-          <Text style={styles.metaItem}>Slug: {organizationQuery.data.slug}</Text>
-          <Text style={styles.metaItem}>Plan: {organizationQuery.data.plan}</Text>
-          <Text style={styles.metaItem}>Joined as: {selectedMembership?.role ?? "Member"}</Text>
-          <Text style={styles.metaItem}>Created: {formatDate(organizationQuery.data.createdAt)}</Text>
+      <ScrollView contentContainerStyle={styles.content}>
+        <View style={styles.header}>
+          <View style={styles.headerText}>
+            <Text style={styles.kicker}>DASHBOARD</Text>
+            <Text style={styles.orgName} numberOfLines={1}>{organization.name}</Text>
+            {selectedMembership ? <RoleBadge role={selectedMembership.role} /> : null}
+          </View>
+          <Avatar name={organization.name} size={48} />
         </View>
 
-        <View style={styles.formBlock}>
-          <Text style={styles.label}>Organization name</Text>
-          <TextInput
-            onChangeText={setName}
-            placeholder="Organization name"
-            style={styles.input}
-            value={name}
-          />
+        <Card>
+          <View style={styles.metaRow}>
+            <Text style={styles.metaLabel}>Plan</Text>
+            <Text style={styles.metaValue}>{organization.plan}</Text>
+          </View>
+          <View style={styles.metaRow}>
+            <Text style={styles.metaLabel}>Slug</Text>
+            <Text style={styles.metaValue}>{organization.slug}</Text>
+          </View>
+          <View style={styles.metaRow}>
+            <Text style={styles.metaLabel}>Created</Text>
+            <Text style={styles.metaValue}>{formatDate(organization.createdAt)}</Text>
+          </View>
+        </Card>
 
-          {validationError ? <Text style={styles.errorText}>{validationError}</Text> : null}
-          {updateMutation.isError ? (
-            <Text style={styles.errorText}>
-              {getErrorMessage(updateMutation.error, "Could not update organization.")}
-            </Text>
-          ) : null}
+        <OrgStudentsCard
+          orgId={selectedOrgId}
+          onAddStudent={() => {
+            router.push("/(app)/(teacher)/students/new" as Href);
+          }}
+          onSeeAll={() => {
+            router.push("/(app)/(teacher)/students" as Href);
+          }}
+          onSelectStudent={(studentId) => {
+            router.push(`/(app)/(teacher)/students/${studentId}` as Href);
+          }}
+        />
 
+        <Card>
           <Pressable
-            disabled={!canSubmit}
-            onPress={() => {
-              void submit();
-            }}
-            style={[styles.primaryButton, !canSubmit && styles.disabledButton]}
+            accessibilityRole="button"
+            onPress={() => router.push("/settings" as Href)}
+            style={styles.linkRow}
           >
-            {updateMutation.isPending ? (
-              <ActivityIndicator color="#ffffff" />
-            ) : (
-              <Text style={styles.primaryButtonText}>Update organization</Text>
-            )}
+            <Ionicons name="settings-outline" size={18} color={colors.textMuted} />
+            <View style={styles.linkText}>
+              <Text style={styles.linkTitle}>Organisation settings</Text>
+              <Text style={styles.linkBody}>Edit the organisation name, view plan and slug.</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
           </Pressable>
-        </View>
-      </View>
+        </Card>
+
+        <Pressable accessibilityRole="button" onPress={goToSelector} style={styles.switchOrg}>
+          <Text style={styles.switchOrgText}>Switch organisation</Text>
+        </Pressable>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -287,70 +190,98 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f1f5f9",
-    justifyContent: "center",
-    padding: 20,
+    backgroundColor: colors.background,
   },
-  card: {
-    backgroundColor: "#ffffff",
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    padding: 18,
-    gap: 12,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#0f172a",
-  },
-  subtitle: {
-    fontSize: 14,
-    color: "#64748b",
-  },
-  metaList: {
-    gap: 4,
-  },
-  metaItem: {
-    fontSize: 13,
-    color: "#334155",
-  },
-  formBlock: {
-    gap: 8,
-  },
-  label: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#334155",
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: "#cbd5e1",
-    borderRadius: 12,
-    backgroundColor: "#ffffff",
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-    fontSize: 16,
-    color: "#0f172a",
-  },
-  primaryButton: {
-    borderRadius: 12,
-    minHeight: 46,
-    backgroundColor: "#1d4ed8",
+  centered: {
+    flex: 1,
+    backgroundColor: colors.background,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 4,
+    gap: spacing.md,
+    padding: spacing.xl,
   },
-  primaryButtonText: {
-    fontSize: 15,
+  content: {
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.xl,
+    gap: spacing.lg,
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.md,
+  },
+  headerText: {
+    flex: 1,
+    gap: 4,
+  },
+  kicker: {
+    fontSize: 12,
     fontWeight: "700",
-    color: "#ffffff",
+    letterSpacing: 1.1,
+    color: colors.action,
   },
-  disabledButton: {
-    opacity: 0.5,
+  orgName: {
+    fontSize: 26,
+    fontWeight: "700",
+    color: colors.textPrimary,
+  },
+  fullWidthCard: {
+    alignSelf: "stretch",
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: colors.textPrimary,
+  },
+  metaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  metaLabel: {
+    fontSize: 13,
+    color: colors.textMuted,
+  },
+  metaValue: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.textPrimary,
+  },
+  linkRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 11,
+  },
+  linkText: {
+    flex: 1,
+    gap: 2,
+  },
+  linkTitle: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: colors.textPrimary,
+  },
+  linkBody: {
+    fontSize: 12,
+    color: colors.textMuted,
+  },
+  mutedText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: "center",
   },
   errorText: {
     fontSize: 13,
-    color: "#b91c1c",
+    color: "#B91C1C",
+  },
+  switchOrg: {
+    alignItems: "center",
+    paddingVertical: spacing.md,
+  },
+  switchOrgText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.primary,
   },
 });

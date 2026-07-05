@@ -1,0 +1,174 @@
+
+<h2 class="sr-only">Interactive TuitionIQ sidebar mockup — click the collapse arrow, nav items, and profile row to explore. Profile settings sections shown below.</h2>
+<div id="root" style="padding:0.5rem 0;"></div>
+<script>
+let S={ex:true,fly:false,pg:1};
+
+const NV=[
+  {ic:'ti-layout-dashboard',lb:'Dashboard',gr:'nav'},
+  {ic:'ti-users',lb:'Students',gr:'nav',bg:{v:'12',t:'info'}},
+  {ic:'ti-receipt-2',lb:'Billing',gr:'nav',bg:{v:'3 overdue',t:'warning'}},
+  {ic:'ti-settings',lb:'Org settings',gr:'cfg'},
+  {ic:'ti-help-circle',lb:'Help & docs',gr:'sup'},
+];
+
+const PS=[
+  {c:'#185FA5',ic:'ti-user',t:'Personal info',
+   fs:['Profile photo (upload)','First name','Last name','Phone (optional)','Email — display only'],
+   n:'Email is read-only; managed by Supabase Auth. Write a clear "why" note beside it.'},
+  {c:'#854F0B',ic:'ti-shield-check',t:'Security',
+   fs:['Change password','Two-factor auth'],
+   n:'Password change triggers the forgot-password email flow. 2FA is a v1.1 insertion point — add the row now, disabled with a "coming soon" label.'},
+  {c:'#0F6E56',ic:'ti-bell',t:'Notifications',
+   fs:['Payment received','Overdue period alert','Email digest frequency'],
+   n:'Not in v1.0. Design the rows now so they slot in without a layout change later.'},
+  {c:'#A32D2D',ic:'ti-devices',t:'Sessions',
+   fs:['Sign out this device','Sign out everywhere (all devices)','Active sessions list'],
+   n:'Spec: sign out everywhere must be real, visible UI — not hidden in developer tooling. Active sessions list is future.'},
+];
+
+const ic=(n,x='')=>`<i class="ti ${n}" aria-hidden="true" style="font-size:16px;${x}"></i>`;
+
+function ni(item,idx){
+  const a=idx===S.pg,e=S.ex;
+  return `<div onclick="setAct(${idx})" style="display:flex;align-items:center;gap:9px;padding:6px 10px;border-radius:6px;margin:1px 7px;cursor:pointer;background:${a?'#E6F1FB':'transparent'};">
+    ${ic(item.ic,`color:${a?'#185FA5':'var(--color-text-secondary)'};flex-shrink:0;font-size:18px;${!e?'margin:0 auto;':''}`)}
+    ${e?`<span style="font-size:13px;color:${a?'#185FA5':'var(--color-text-secondary)'};font-weight:${a?500:400};flex:1;white-space:nowrap;">${item.lb}</span>`:''}
+    ${e&&item.bg?`<span style="font-size:10px;padding:1px 7px;border-radius:999px;white-space:nowrap;background:var(--color-background-${item.bg.t});color:var(--color-text-${item.bg.t});">${item.bg.v}</span>`:''}
+  </div>`;
+}
+
+function sl(txt){
+  return S.ex?`<p style="font-size:10px;color:var(--color-text-tertiary);padding:7px 18px 2px;letter-spacing:0.07em;text-transform:uppercase;margin:0;">${txt}</p>`:`<div style="height:5px;"></div>`;
+}
+
+function fr(icon,lbl,d=false){
+  return `<div style="display:flex;align-items:center;gap:9px;padding:6px 12px;font-size:12px;cursor:pointer;color:${d?'var(--color-text-danger)':'var(--color-text-secondary)'};">
+    ${ic(icon,`font-size:15px;flex-shrink:0;color:${d?'var(--color-text-danger)':'inherit'};`)}${lbl}
+  </div>`;
+}
+
+function flyout(){
+  return `<div style="border-top:0.5px solid var(--color-border-tertiary);flex-shrink:0;">
+    <div style="padding:9px 12px 7px;border-bottom:0.5px solid var(--color-border-tertiary);">
+      <p style="font-size:13px;font-weight:500;color:var(--color-text-primary);margin:0;">James Thornton</p>
+      <p style="font-size:11px;color:var(--color-text-tertiary);margin:2px 0 4px;">james@smithstutoring.com</p>
+      <span style="font-size:10px;padding:2px 6px;border-radius:999px;background:var(--color-background-info);color:var(--color-text-info);">Owner</span>
+    </div>
+    <div style="border-bottom:0.5px solid var(--color-border-tertiary);">
+      ${fr('ti-user-edit','Edit profile')}
+      ${fr('ti-lock','Change password')}
+    </div>
+    <div>
+      ${fr('ti-logout','Sign out')}
+      ${fr('ti-logout','Sign out everywhere',true)}
+    </div>
+  </div>`;
+}
+
+function sidebar(){
+  const w=S.ex?218:52;
+  const groups=[
+    {label:'Navigate',items:NV.filter(n=>n.gr==='nav'),idxs:[0,1,2]},
+    {label:'Configure',items:NV.filter(n=>n.gr==='cfg'),idxs:[3]},
+    {label:'Support',items:NV.filter(n=>n.gr==='sup'),idxs:[4]},
+  ];
+  return `<div style="width:${w}px;min-width:${w}px;background:var(--color-background-primary);border-right:0.5px solid var(--color-border-tertiary);display:flex;flex-direction:column;flex-shrink:0;overflow:hidden;">
+
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 10px 8px;flex-shrink:0;">
+      <div style="display:flex;align-items:center;gap:8px;overflow:hidden;">
+        <div style="width:28px;height:28px;min-width:28px;background:#185FA5;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          ${ic('ti-book-2','color:#fff;font-size:15px;')}
+        </div>
+        ${S.ex?`<span style="font-size:14px;font-weight:500;color:var(--color-text-primary);white-space:nowrap;">TuitionIQ</span>`:''}
+      </div>
+      <button onclick="toggle('ex')" style="padding:3px;border-radius:4px;border:none;background:none;color:var(--color-text-tertiary);cursor:pointer;flex-shrink:0;" title="${S.ex?'Collapse':'Expand'} sidebar">
+        ${ic(`ti-${S.ex?'layout-sidebar-left-collapse':'layout-sidebar-right-collapse'}`,'font-size:16px;')}
+      </button>
+    </div>
+
+    <div style="padding:0 8px 8px;border-bottom:0.5px solid var(--color-border-tertiary);flex-shrink:0;">
+      <div style="display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:6px;background:var(--color-background-secondary);cursor:pointer;">
+        <div style="width:26px;height:26px;min-width:26px;background:#185FA5;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:500;color:#fff;flex-shrink:0;">ST</div>
+        ${S.ex?`
+        <div style="overflow:hidden;flex:1;">
+          <p style="font-size:12px;font-weight:500;color:var(--color-text-primary);margin:0;white-space:nowrap;overflow:hidden;">Smith's Tutoring</p>
+          <p style="font-size:10px;color:var(--color-text-tertiary);margin:0;">Owner</p>
+        </div>
+        ${ic('ti-selector','font-size:14px;color:var(--color-text-tertiary);flex-shrink:0;')}`:''}
+      </div>
+    </div>
+
+    <div style="flex:1;overflow-y:auto;padding:6px 0;min-height:0;">
+      ${groups.map(g=>`${sl(g.label)}${g.items.map((item,j)=>ni(item,g.idxs[j])).join('')}`).join('')}
+    </div>
+
+    ${S.fly&&S.ex?flyout():''}
+
+    <div style="flex-shrink:0;${S.fly&&S.ex?'':'border-top:0.5px solid var(--color-border-tertiary);'}padding:8px;">
+      <div onclick="toggle('fly')" style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;${S.fly&&S.ex?'background:var(--color-background-secondary);':''}">
+        <div style="width:32px;height:32px;min-width:32px;border-radius:50%;background:#E6F1FB;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:500;color:#185FA5;flex-shrink:0;">JT</div>
+        ${S.ex?`
+        <div style="overflow:hidden;flex:1;">
+          <p style="font-size:12px;font-weight:500;color:var(--color-text-primary);margin:0;white-space:nowrap;">James Thornton</p>
+          <p style="font-size:10px;color:var(--color-text-tertiary);margin:0;">Owner</p>
+        </div>
+        ${ic(S.fly?'ti-chevron-down':'ti-dots','font-size:15px;color:var(--color-text-tertiary);flex-shrink:0;')}`:''}
+      </div>
+    </div>
+
+  </div>`;
+}
+
+function main(){
+  const pg=NV[S.pg];
+  const rows=[['Emma Wilson','Active','success'],['Liam Chen','Invite pending','warning'],['Priya Sharma','Active','success'],['Daniel Osei','Active','success']];
+  return `<div style="flex:1;background:var(--color-background-secondary);overflow:hidden;display:flex;flex-direction:column;">
+    <div style="padding:16px 18px 0;flex-shrink:0;">
+      <p style="font-size:10px;color:var(--color-text-tertiary);margin:0 0 2px;text-transform:uppercase;letter-spacing:0.06em;">${pg?.lb}</p>
+      <p style="font-size:17px;font-weight:500;color:var(--color-text-primary);margin:0 0 14px;">${S.pg===1?'All students':S.pg===2?'Billing overview':S.pg===3?'Organisation settings':S.pg===4?'Help & docs':'Dashboard'}</p>
+    </div>
+    ${S.pg===1?`
+    <div style="padding:0 18px;flex:1;overflow:hidden;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+        <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:8px;padding:10px 12px;"><p style="font-size:10px;color:var(--color-text-tertiary);margin:0 0 2px;">Active</p><p style="font-size:20px;font-weight:500;margin:0;color:var(--color-text-primary);">12</p></div>
+        <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:8px;padding:10px 12px;"><p style="font-size:10px;color:var(--color-text-tertiary);margin:0 0 2px;">Pending invites</p><p style="font-size:20px;font-weight:500;margin:0;color:var(--color-text-primary);">2</p></div>
+      </div>
+      <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:8px;overflow:hidden;">
+        ${rows.map(([n,s,t],j,a)=>`<div style="padding:7px 12px;${j<a.length-1?'border-bottom:0.5px solid var(--color-border-tertiary);':''}display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;font-weight:500;color:var(--color-text-primary);">${n}</span><span style="font-size:10px;padding:2px 7px;border-radius:999px;background:var(--color-background-${t});color:var(--color-text-${t});">${s}</span></div>`).join('')}
+      </div>
+    </div>`:`<div style="padding:0 18px;"><div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:8px;padding:24px;text-align:center;color:var(--color-text-tertiary);font-size:13px;">Click nav items to preview pages</div></div>`}
+    <div style="padding:8px 18px;flex-shrink:0;">
+      <p style="font-size:11px;color:var(--color-text-tertiary);margin:0;">← Arrow collapses sidebar &nbsp;·&nbsp; Profile row opens menu</p>
+    </div>
+  </div>`;
+}
+
+function render(){
+  document.getElementById('root').innerHTML=`
+  <div style="display:flex;border:0.5px solid var(--color-border-tertiary);border-radius:12px;overflow:hidden;height:500px;margin-bottom:14px;">
+    ${sidebar()}${main()}
+  </div>
+  <p style="font-size:10px;color:var(--color-text-tertiary);text-transform:uppercase;letter-spacing:0.07em;margin:0 0 10px;">Profile settings — recommended sections</p>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px;">
+    ${PS.map(s=>`
+    <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:8px;padding:12px 14px;">
+      <div style="display:flex;align-items:center;gap:7px;margin-bottom:9px;">
+        <span style="width:6px;height:6px;min-width:6px;border-radius:50%;background:${s.c};"></span>
+        ${ic(s.ic,`color:${s.c};flex-shrink:0;font-size:17px;`)}
+        <span style="font-size:13px;font-weight:500;color:var(--color-text-primary);">${s.t}</span>
+      </div>
+      <div style="font-size:12px;line-height:1.9;color:var(--color-text-secondary);margin-bottom:8px;">${s.fs.join('<br>')}</div>
+      <p style="font-size:11px;color:var(--color-text-tertiary);margin:0;padding-top:7px;border-top:0.5px solid var(--color-border-tertiary);line-height:1.5;">ⓘ ${s.n}</p>
+    </div>`).join('')}
+  </div>`;
+}
+
+window.toggle=(t)=>{
+  if(t==='ex'){S.ex=!S.ex;if(!S.ex)S.fly=false;}
+  else if(t==='fly'){if(S.ex)S.fly=!S.fly;else{S.ex=true;S.fly=false;}}
+  render();
+};
+window.setAct=(idx)=>{S.pg=idx;S.fly=false;render();};
+render();
+</script>

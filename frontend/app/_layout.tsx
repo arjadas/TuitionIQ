@@ -1,6 +1,7 @@
 import { useAuthSession } from "@/src/features/auth/hooks/useAuthSession";
 import { queryClient } from "@/src/lib/queryClient";
-import { useAuthStore } from "@/src/store/authStore";
+import { selectIsInitializingAuth, useAuthStore } from "@/src/store/authStore";
+import { AuthLoadingScreen } from "@/src/shared/components/ui/AuthLoadingScreen";
 import { QueryClientProvider } from "@tanstack/react-query";
 import * as SplashScreen from "expo-splash-screen";
 import { router, Stack, type Href } from "expo-router";
@@ -12,7 +13,7 @@ void SplashScreen.preventAutoHideAsync();
 
 function RootNavigator() {
   const isAutoRefreshRunning = useRef(false);
-  const isInitialised = useAuthStore((state) => state.isInitialised);
+  const isInitializingAuth = useAuthStore(selectIsInitializingAuth);
 
   const handlePasswordRecovery = useCallback(() => {
     router.replace("/(auth)/reset-password" as Href);
@@ -66,13 +67,13 @@ function RootNavigator() {
   }, []);
 
   useEffect(() => {
-    if (isInitialised) {
+    if (!isInitializingAuth) {
       void SplashScreen.hideAsync();
     }
-  }, [isInitialised]);
+  }, [isInitializingAuth]);
 
-  if (!isInitialised) {
-    return null;
+  if (isInitializingAuth) {
+    return <AuthLoadingScreen />;
   }
 
   return <Stack screenOptions={{ headerShown: false }} />;

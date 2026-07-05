@@ -41,7 +41,7 @@ Current implementation status:
   - Entity Framework Core + Npgsql
   - MediatR
   - FluentValidation
-  - JWT Bearer auth (Supabase JWT secret validation)
+  - JWT Bearer auth (Supabase OIDC/JWKS validation via `Supabase:ProjectRef`)
 - Database:
   - PostgreSQL (Supabase)
   - EF Core migrations
@@ -64,13 +64,13 @@ Current implementation status:
 │   ├── app/                             # Expo Router routes
 │   │   ├── (auth)/                      # login/signup/forgot-password/reset-password
 │   │   ├── (verify)/                    # post-login OTP verification gate
-│   │   ├── (app)/                       # protected app routes (home/dashboard/organizations)
-│   │   └── join.tsx                     # invite acceptance flow (token stripped from URL)
+│   │   └── (app)/                       # protected routes (home/dashboard, organizations, billing, settings, (teacher))
 │   └── src/
 │       ├── lib/                         # supabase client, axios api client, query client
-│       ├── features/                    # auth, organizations, users
-│       ├── store/                       # Zustand stores
-│       └── types/                       # @tuitioniq/types declarations
+│       ├── features/                    # auth, users, organizations, students, billing
+│       ├── store/                       # Zustand stores (auth, org, ui)
+│       ├── shared/                      # cross-cutting helpers (formatCurrency, etc.)
+│       └── types/                       # hand-maintained @tuitioniq/types declarations
 ├── docs/                                # Source-of-truth architecture docs
 └── archives/                            # Legacy/prototype code kept for reference
 ```
@@ -86,12 +86,12 @@ Current implementation status:
 
 ### 1) Install dependencies
 
-From repository root:
+There is no root `package.json`; the frontend and backend are installed and run separately.
+
+Install frontend dependencies:
 
 ```bash
-npm install
-cd frontend && npm install
-cd ..
+cd frontend && npm install && cd ..
 ```
 
 Restore backend dependencies:
@@ -121,24 +121,31 @@ Set backend configuration (environment variables or user-secrets):
 ```bash
 ConnectionStrings__DefaultConnection=Host=<host>;Port=5432;Database=<db>;Username=<user>;Password=<password>;SSL Mode=Require;Trust Server Certificate=true
 Supabase__ProjectRef=<your-project-ref>
+Supabase__ServiceRoleKey=<your-service-role-key>
 App__AllowedOrigins__0=http://localhost:8081
 ```
 
 ### 3) Apply database migrations
 
+Requires the EF Core CLI (`dotnet tool install --global dotnet-ef`). Run against the Api startup project:
+
 ```bash
-cd backend/src/TuitionIQ.Api
-dotnet ef database update
-cd ../../..
+dotnet ef database update \
+  --project backend/src/TuitionIQ.Infrastructure \
+  --startup-project backend/src/TuitionIQ.Api
 ```
 
 ## Usage
 
 ### Run backend API
 
+The API binds to `http://0.0.0.0:5000` (configured in `appsettings.json`):
+
 ```bash
-dotnet run --project backend/src/TuitionIQ.Api/TuitionIQ.Api.csproj --urls "http://0.0.0.0:5000"
+dotnet run --project backend/src/TuitionIQ.Api/TuitionIQ.Api.csproj
 ```
+
+> **macOS note:** port 5000 is used by AirPlay Receiver by default. If startup fails to bind, disable it in System Settings → General → AirDrop & Handoff → turn off "AirPlay Receiver" (or pass a different port with `--urls`).
 
 ### Run frontend
 
@@ -181,6 +188,7 @@ Platform URL guidance:
 
 - `ConnectionStrings__DefaultConnection`: Postgres connection string.
 - `Supabase__ProjectRef`: Supabase project ref used to resolve the Supabase issuer / OIDC metadata for JWT validation.
+- `Supabase__ServiceRoleKey`: Supabase service-role key (backend-only; never expose to the frontend).
 - `App__AllowedOrigins__*`: Allowed origins for mutating requests.
 
 JWT validation note:
@@ -215,12 +223,7 @@ JWT validation note:
 
 ## Scripts
 
-### Root (`package.json`)
-
-- `npm run dev`: runs frontend + backend concurrently.
-- `npm run dev:frontend`: runs frontend dev command.
-- `npm run dev:backend`: currently points to a legacy path (`backend/TuitionIQ`) and needs updating.
-- `npm run build`: runs frontend and backend build scripts.
+There is no root `package.json`. Run the backend and frontend separately in two terminals (backend with `dotnet run`, frontend with `npm run web`).
 
 ### Frontend (`frontend/package.json`)
 

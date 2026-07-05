@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
+using Microsoft.Extensions.Logging.Abstractions;
 using TuitionIQ.Api.Middleware;
 using TuitionIQ.Application.Features.Users.Commands;
 using TuitionIQ.Domain.Entities;
@@ -86,7 +87,7 @@ public sealed class VerifyEmailCommandTests
       return Task.CompletedTask;
     };
 
-    var middleware = new UserActiveCheckMiddleware(next);
+    var middleware = new UserActiveCheckMiddleware(next, NullLogger<UserActiveCheckMiddleware>.Instance);
 
     await middleware.InvokeAsync(httpContext, dbContext);
 

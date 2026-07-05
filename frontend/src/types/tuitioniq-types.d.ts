@@ -130,6 +130,20 @@ declare module "@tuitioniq/types" {
     createdAt: string;
   };
 
+  export type OrgFeePeriodDto = {
+    id: string;
+    studentId: string;
+    studentName: string;
+    periodYear: number;
+    periodMonth: number;
+    fee: number;
+    amountPaid: number;
+    currency: string;
+    status: string;
+    dueDate?: string | null;
+    createdAt: string;
+  };
+
   export type FeePaymentDto = {
     id: string;
     amount: number;
