@@ -2,6 +2,19 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Goal
+
+TuitionIQ helps private tutors and small tuition centres run the administrative side of their teaching. The primary goal is to give a tutor a single place to manage their students and stay on top of payments — replacing the scattered notebooks, spreadsheets, and chat messages that student rosters and fee tracking usually live in.
+
+For a tutor, that means being able to:
+
+- Keep an organized roster of students in one or more organizations (workspaces).
+- Set each student's fees and the periods they apply to (e.g. monthly tuition).
+- See at a glance who has paid, who is due, and who is overdue.
+- Record and reverse payments, with a full audit trail of every change.
+
+The result is less time spent chasing and reconciling payments, and a clear, reliable record of who owes what.
+
 ## Mandatory pre-read
 
 `docs/` holds the source-of-truth architecture docs. Read the relevant one before writing code and never contradict it: `authentication.md` (auth, OTP, JWT, session, RLS), `database_schema.md` (tables, FKs, triggers, EF rules, money, soft deletes), and `project_structure.md` (monorepo layout, feature folders, naming, routing, shared types). `.github/copilot-instructions.md` additionally holds product-scope boundaries and an "ask vs proceed" checklist that are not repeated here.
